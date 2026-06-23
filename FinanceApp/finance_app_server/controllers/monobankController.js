@@ -3,12 +3,13 @@ const db = require('../db');
 async function setToken(req, res) {
     try {
         const userId = req.params.userId;
-        const {token} = req.body;
+        const { token } = req.body;
         console.log('Зберігаємо токен для користувача ', userId);
-        const tokens = await db.setBankToken(userId, token);
-        res.json(tokens);
+        
+        const result = await db.setBankToken(userId, token);
+        res.json(result);
     } catch (err) {
-        console.log(err.toString());
+        console.error("Помилка setToken:", err.toString());
         res.status(500).json({"message": "Помилка збереження токену"});
     }
 }
@@ -16,15 +17,15 @@ async function setToken(req, res) {
 async function getTransactions(req, res) {
     try {
         const userId = req.params.userId;
-        // const { from, to } = req.body;
         const from = req.params.from;
         const to = req.params.to;
-        console.log('Синхронізація з монобанк для користувача ', userId);
+        
+        console.log('Синхронізація з Monobank для користувача ', userId);
 
         // Отримуємо токен користувача з бази
         const token = await db.getBankToken(userId);
-        console.log("token = ", token);
         if (!token) {
+            console.log("Токен відсутній для користувача", userId);
             return res.status(401).json({ message: 'Токен доступу не знайдено' });
         }
 
@@ -34,7 +35,7 @@ async function getTransactions(req, res) {
         if (to && to !== "") {
             url += `${to}`;
         }
-        console.log("Запит до банку ", url);
+        console.log("Запит до банку:", url);
 
         // Виконуємо запит до API monobank
         const response = await fetch(url, {
@@ -47,7 +48,7 @@ async function getTransactions(req, res) {
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Помилка від monobank API:', response.status, errorText);
+            console.error('❌ Помилка від monobank API:', response.status, errorText);
             return res.status(response.status).json({ message: 'Помилка отримання транзакцій від банку' });
         }
 
@@ -57,7 +58,7 @@ async function getTransactions(req, res) {
         res.json(bankTransactions);
 
     } catch (err) {
-        console.log(err.toString());
+        console.error("Помилка getTransactions:", err.toString());
         res.status(500).json({ message: 'Помилка отримання даних' });
     }
 }

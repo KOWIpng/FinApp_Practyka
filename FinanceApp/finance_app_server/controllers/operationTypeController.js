@@ -5,8 +5,8 @@ async function getAllOperationTypes(req, res) {
         const operationTypes = await db.getAllOperationTypes();
         res.json(operationTypes);
     } catch (err) {
-        console.log(err.toString());
-        res.status(500).send('Помилка отримання типів операцій');
+        console.error("Помилка getAllOperationTypes:", err.toString());
+        res.status(500).json({ message: 'Помилка отримання типів операцій' });
     }
 }
 
@@ -14,10 +14,13 @@ async function createOperationType(req, res) {
     try {
         const { direction, name } = req.body;
         const operationTypeId = await db.createOperationType(direction, name);
-        res.send(`Тип операції створений з ID: ${operationTypeId}`);
+        res.status(201).json({ 
+            message: `Тип операції створений`, 
+            id: operationTypeId 
+        });
     } catch (err) {
-        console.log(err.toString());
-        res.status(500).send('Помилка створення типу операції');
+        console.error("Помилка createOperationType:", err.toString());
+        res.status(500).json({ message: 'Помилка створення типу операції' });
     }
 }
 

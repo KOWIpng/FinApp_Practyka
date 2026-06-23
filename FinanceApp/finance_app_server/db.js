@@ -1,9 +1,18 @@
-const sqlite3 = require("sqlite3").verbose()
+const { Pool } = require("pg")
 const bcrypt = require("bcrypt")
 const jwt = require("jsonwebtoken")
 
-const db = new sqlite3.Database("./financeDB.db")
+// підключення до бази постгрес
+const pool = new Pool({
+  user: "eugene",       // Твій користувач у Postgres
+  host: "localhost",
+  database: "postgres",   // Твоя база даних
+  password: "",    
+  port: 5432,       
+})
+
 const canceledTokens = new Set()
+
 
 async function generateToken(user) {
   const payload = { id: user.code, name: user.name }
@@ -20,222 +29,205 @@ function isTokenInvalid(token) {
 
 async function createUser(name, password) {
   const hashedPassword = await bcrypt.hash(password, 10)
-  return new Promise((resolve, reject) => {
-    db.run("INSERT INTO Users (name, password) VALUES (?, ?)", name, hashedPassword, function (err) {
-      if (err) reject(err)
-      else resolve(this.lastID)
-    })
-  })
+  try {
+    const res = await pool.query(
+      "INSERT INTO Users (name, password) VALUES ($1, $2) RETURNING code",
+      [name, hashedPassword]
+    )
+    return res.rows[0].code
+  } catch (err) {
+    throw err
+  }
 }
 
 async function getUserByName(name) {
-  return new Promise((resolve, reject) => {
-    db.get("SELECT * FROM Users WHERE name = ?", name, (err, row) => {
-      if (err) reject(err)
-      else resolve(row)
-    })
-  })
+  try {
+    const res = await pool.query("SELECT * FROM Users WHERE name = $1", [name])
+    return res.rows[0]
+  } catch (err) {
+    throw err
+  }
 }
 
 async function getUserById(id) {
-  return new Promise((resolve, reject) => {
-    db.get("SELECT * FROM Users WHERE code = ?", id, (err, row) => {
-      if (err) reject(err)
-      else resolve(row)
-    })
-  })
+  try {
+    const res = await pool.query("SELECT * FROM Users WHERE code = $1", [id])
+    return res.rows[0]
+  } catch (err) {
+    throw err
+  }
 }
 
 async function getAllOperations(userId) {
-  return new Promise((resolve, reject) => {
-    db.all("SELECT * FROM vOperations WHERE User_ID = ?", userId, (err, rows) => {
-      if (err) reject(err)
-      else resolve(rows)
-    })
-  })
+  try {
+    const res = await pool.query("SELECT * FROM vOperations WHERE User_ID = $1", [userId])
+    return res.rows
+  } catch (err) {
+    throw err
+  }
 }
 
 async function createOperation(userId, date, categoryId, amount, currency, description) {
-  return new Promise((resolve, reject) => {
-    db.run(
-      "INSERT INTO Operations (user_id, date, category_id, amount, currency, description) VALUES (?, ?, ?, ?, ?, ?)",
-      userId,
-      date,
-      categoryId,
-      amount,
-      currency,
-      description,
-      function (err) {
-        if (err) reject(err)
-        else resolve(this.lastID)
-      },
+  try {
+    const res = await pool.query(
+      "INSERT INTO Operations (user_id, date, category_id, amount, currency, description) VALUES ($1, $2, $3, $4, $5, $6) RETURNING code",
+      [userId, date, categoryId, amount, currency, description]
     )
-  })
+    return res.rows[0].code
+  } catch (err) {
+    throw err
+  }
 }
 
 async function getAllCategories(userId) {
-  return new Promise((resolve, reject) => {
-    db.all("SELECT * FROM vCategories WHERE user_id = ?", userId, (err, rows) => {
-      if (err) reject(err)
-      else resolve(rows)
-    })
-  })
+  try {
+    const res = await pool.query("SELECT * FROM vCategories WHERE user_id = $1", [userId])
+    return res.rows
+  } catch (err) {
+    throw err
+  }
 }
 
 async function createCategory(name, userId, direction) {
-  return new Promise((resolve, reject) => {
-    db.run(
-      "INSERT INTO Categories (name, user_id, direction) VALUES (?, ?, ?)",
-      [name, userId, direction], // ← правильний формат
-      function (err) {
-        if (err){
-            console.error('❗ SQLite помилка:', err);
-            reject(err);
-        }else {
-            resolve(this.lastID);
-        }
-      }
-    );
-  });
+  try {
+    const res = await pool.query(
+      "INSERT INTO Categories (name, user_id, direction) VALUES ($1, $2, $3) RETURNING code",
+      [name, userId, direction]
+    )
+    return res.rows[0].code
+  } catch (err) {
+    console.error('❗ Postgres помилка:', err);
+    throw err
+  }
 }
 
-function setCategoryTarget(categoryId, userId, target) {
-  return new Promise((resolve, reject) => {
-    db.run(
-      `UPDATE Categories SET target = ? WHERE code = ? AND user_id = ?`,
-      [target, categoryId, userId],
-      function (err) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(true);
-        }
-      }
-    );
-  });
+async function setCategoryTarget(categoryId, userId, target) {
+  try {
+    await pool.query(
+      "DELETE FROM Categories WHERE code = $1 AND user_id = $2",
+      [categoryId, userId]
+    )
+    return true
+  } catch (err) {
+    throw err
+  }
 }
 
-function deleteCategory(categoryId, userId) {
-  return new Promise((resolve, reject) => {
-    db.run(
-      `DELETE FROM Categories WHERE code = ? AND user_id = ?`,
-      [categoryId, userId],
-      function (err) {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(true);
-        }
-      }
-    );
-  });
+async function getAllOperationTypes() {
+  try {
+    const res = await pool.query("SELECT * FROM OperationTypes")
+    return res.rows
+  } catch (err) {
+    throw err
+  }
 }
 
 
 
 
 async function getAllOperationTypes() {
-  return new Promise((resolve, reject) => {
-    db.all("SELECT * FROM OperationTypes", (err, rows) => {
-      if (err) reject(err)
-      else resolve(rows)
-    })
-  })
+ try {
+    const res = await pool.query("SELECT * FROM OperationTypes")
+    return res.rows
+  } catch (err) {
+    throw err
+  }
 }
 
 async function createOperationType(direction, name) {
-  return new Promise((resolve, reject) => {
-    db.run("INSERT INTO OperationTypes (direction, name) VALUES (?, ?)", direction, name, function (err) {
-      if (err) reject(err)
-      else resolve(this.lastID)
-    })
-  })
+  try {
+    const res = await pool.query(
+      "INSERT INTO OperationTypes (direction, name) VALUES ($1, $2) RETURNING code",
+      [direction, name]
+    )
+    return res.rows[0].code
+  } catch (err) {
+    throw err
+  }
 }
 
 async function getAllSavings(userId) {
-  return new Promise((resolve, reject) => {
-    db.all("SELECT * FROM Savings WHERE user_id = ?", userId, (err, rows) => {
-      if (err) reject(err)
-      else resolve(rows)
-    })
-  })
+  try {
+    const res = await pool.query("SELECT * FROM Savings WHERE user_id = $1", [userId])
+    return res.rows
+  } catch (err) {
+    throw err
+  }
 }
 
 async function createSavings(userId, title, target, current) {
-  return new Promise((resolve, reject) => {
-    db.run(
-      "INSERT INTO Savings (user_id, title, target, current) VALUES (?, ?, ?, ?)",
-      userId,
-      title,
-      target,
-      current,
-      function (err) {
-        if (err) reject(err)
-        else resolve(this.lastID)
-      },
+  try {
+    const res = await pool.query(
+      "INSERT INTO Savings (user_id, title, target, current) VALUES ($1, $2, $3, $4) RETURNING code",
+      [userId, title, target, current]
     )
-  })
+    return res.rows[0].code
+  } catch (err) {
+    throw err
+  }
 }
 
 async function updateSavings(code, amount) {
-  return new Promise((resolve, reject) => {
-    db.run("UPDATE Savings SET current = current + ? WHERE code = ?", amount, code, (err) => {
-      if (err) reject(err)
-      else resolve()
-    })
-  })
+ try {
+    await pool.query("UPDATE Savings SET current = current + $1 WHERE code = $2", [amount, code])
+  } catch (err) {
+    throw err
+  }
 }
 
 async function deleteSavings(code) {
-  return new Promise((resolve, reject) => {
-    db.run("DELETE FROM Savings WHERE code = ?", code, (err) => {
-      if (err) reject(err)
-      else resolve()
-    })
-  })
+ try {
+    await pool.query("DELETE FROM Savings WHERE code = $1", [code])
+  } catch (err) {
+    throw err
+  }
 }
 
 async function getUserInfo(userId) {
-  return new Promise((resolve, reject) => {
-    db.all("SELECT * FROM vUserFullInfo WHERE user_id = ?", userId, (err, rows) => {
-      if (err) reject(err)
-      else resolve(rows)
-    })
-  })
+ try {
+    const res = await pool.query("SELECT * FROM vUserFullInfo WHERE user_id = $1", [userId])
+    return res.rows
+  } catch (err) {
+    throw err
+  }
 }
 
 async function getReport_incvsexp(userId, year, month) {
-  let query = `
+ let query = `
         SELECT 
-            strftime('%Y-%m', date(substr(o.date, 7, 4) || '-' || substr(o.date, 4, 2) || '-' || substr(o.date, 1, 2))) AS month,
+            TO_CHAR(o.date, 'YYYY-MM') AS month,
             c.direction,
             SUM(o.amount) as total_amount
         FROM Operations o
         JOIN Categories c ON o.category_id = c.code
-        WHERE o.user_id = ?
+        WHERE o.user_id = $1
     `
 
   const params = [userId]
+  let paramIndex = 2
 
   if (year) {
-    query += ` AND strftime('%Y', date(substr(o.date, 7, 4) || '-' || substr(o.date, 4, 2) || '-' || substr(o.date, 1, 2))) = ?`
-    params.push(year.toString())
+    query += ` AND EXTRACT(YEAR FROM o.date) = $${paramIndex}`
+    params.push(year)
+    paramIndex++
   }
 
   if (month) {
-    query += ` AND strftime('%m', date(substr(o.date, 7, 4) || '-' || substr(o.date, 4, 2) || '-' || substr(o.date, 1, 2))) = ?`
-    params.push(month.toString().padStart(2, "0"))
+    query += ` AND EXTRACT(MONTH FROM o.date) = $${paramIndex}`
+    params.push(month)
+    paramIndex++
   }
 
   query += ` GROUP BY month, c.direction ORDER BY month`
 
-  return new Promise((resolve, reject) => {
-    db.all(query, params, (err, rows) => {
-      if (err) reject(err)
-      else resolve(rows)
-    })
-  })
+  try {
+    const res = await pool.query(query, params)
+    return res.rows
+  } catch (err) {
+    throw err
+  }
 }
+
 
 async function getReport_CatExp(userId, year, month) {
   let query = `
@@ -244,84 +236,102 @@ async function getReport_CatExp(userId, year, month) {
             SUM(o.amount) as total_amount 
         FROM Operations o
         JOIN Categories c ON c.code = o.category_id
-        WHERE o.user_id = ? AND c.direction = 'expense'
+        WHERE o.user_id = $1 AND c.direction = 'expense'
     `
-
   const params = [userId]
+  let paramIndex = 2
 
   if (year) {
-    query += ` AND strftime('%Y', date(substr(o.date, 7, 4) || '-' || substr(o.date, 4, 2) || '-' || substr(o.date, 1, 2))) = ?`
-    params.push(year.toString())
+    query += ` AND EXTRACT(YEAR FROM o.date) = $${paramIndex}`
+    params.push(year)
+    paramIndex++
   }
 
   if (month) {
-    query += ` AND strftime('%m', date(substr(o.date, 7, 4) || '-' || substr(o.date, 4, 2) || '-' || substr(o.date, 1, 2))) = ?`
-    params.push(month.toString().padStart(2, "0"))
+    query += ` AND EXTRACT(MONTH FROM o.date) = $${paramIndex}`
+    params.push(month)
+    paramIndex++
   }
 
   query += ` GROUP BY c.name`
 
-  return new Promise((resolve, reject) => {
-    db.all(query, params, (err, rows) => {
-      if (err) reject(err)
-      else resolve(rows)
-    })
-  })
+  try {
+    const res = await pool.query(query, params)
+    return res.rows
+  } catch (err) {
+    throw err
+  }
 }
 
+
 async function getReport_ExpenseTrend(userId, year, month) {
-  // Get the last 6 months of expense data
   let query = `
         SELECT 
             o.date,
             SUM(o.amount) as amount
         FROM Operations o
         JOIN Categories c ON c.code = o.category_id
-        WHERE o.user_id = ? AND c.direction = 'expense'
+        WHERE o.user_id = $1 AND c.direction = 'expense'
     `
-
   const params = [userId]
+  let paramIndex = 2
 
   if (year) {
-    query += ` AND strftime('%Y', date(substr(o.date, 7, 4) || '-' || substr(o.date, 4, 2) || '-' || substr(o.date, 1, 2))) = ?`
-    params.push(year.toString())
+    query += ` AND EXTRACT(YEAR FROM o.date) = $${paramIndex}`
+    params.push(year)
+    paramIndex++
   }
 
   if (month) {
-    query += ` AND strftime('%m', date(substr(o.date, 7, 4) || '-' || substr(o.date, 4, 2) || '-' || substr(o.date, 1, 2))) = ?`
-    params.push(month.toString().padStart(2, "0"))
+    query += ` AND EXTRACT(MONTH FROM o.date) = $${paramIndex}`
+    params.push(month)
+    paramIndex++
   }
 
-  query += ` GROUP BY o.date ORDER BY date(substr(o.date, 7, 4) || '-' || substr(o.date, 4, 2) || '-' || substr(o.date, 1, 2)) DESC LIMIT 30`
+  query += ` GROUP BY o.date ORDER BY o.date DESC LIMIT 30`
 
-  return new Promise((resolve, reject) => {
-    db.all(query, params, (err, rows) => {
-      if (err) reject(err)
-      else resolve(rows)
-    })
-  })
+  try {
+    const res = await pool.query(query, params)
+    return res.rows
+  } catch (err) {
+    throw err
+  }
 }
 
 async function setBankToken(userId, token) {
-  return new Promise((resolve, reject) => {
-    db.run("INSERT INTO BankTokens (userid, token) VALUES (?, ?) ON CONFLICT(userid) DO UPDATE SET token = excluded.token;", userId, token, function (err) {
-      if (err) reject(err)
-      else resolve({"message": "Токен збережено"})
-    })
-  })
+  try {
+    await pool.query(
+      "INSERT INTO BankTokens (userid, token) VALUES ($1, $2) ON CONFLICT (userid) DO UPDATE SET token = EXCLUDED.token",
+      [userId, token]
+    )
+    return { "message": "Токен збережено" }
+  } catch (err) {
+    throw err
+  }
 }
 
 async function getBankToken(userId) {
-  return new Promise((resolve, reject) => {
-    db.get("SELECT token FROM BankTokens WHERE userid = ?", userId, function (err, row) {
-      if (err) reject(err)
-      else if (!row){
-        resolve();
-      } else {
-        resolve(row.token);
-      }
-    })
-  })
+  try {
+    const res = await pool.query("SELECT token FROM BankTokens WHERE userid = $1", [userId])
+    if (res.rows.length === 0) {
+      return null
+    }
+    return res.rows[0].token
+  } catch (err) {
+    throw err
+  }
+}
+
+async function deleteCategory(categoryId, userId) {
+  try {
+    await pool.query(
+      "DELETE FROM Categories WHERE code = $1 AND user_id = $2",
+      [categoryId, userId]
+    )
+    return true
+  } catch (err) {
+    throw err
+  }
 }
 
 // async function tempChangeBase() {

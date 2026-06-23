@@ -1144,7 +1144,12 @@ async function deleteGoal(goalId) {
 }
 
 function formatNumber(number) {
-  return number.toLocaleString('uk-UA');
+  if (number === undefined || number === null) {
+    return '0';
+  }
+  
+  // Якщо значення є, перетворюємо його на число і форматуємо
+  return Number(number).toLocaleString();
 }
 
 function getProgressColor(spent, budget) {

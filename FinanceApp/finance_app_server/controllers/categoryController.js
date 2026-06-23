@@ -17,7 +17,6 @@ async function createCategory(req, res) {
     const { name, userId, direction } = req.body;
     console.log('Створення категорії:', name, userId, direction);
     const categoryId = await db.createCategory(name, userId, direction);
-    console.log(res.toString());
     res.status(201).json({ success: true, categoryId });
   } catch (err) {
     console.error('❌ Помилка створення категорії:', err);
