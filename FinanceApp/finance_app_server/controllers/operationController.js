@@ -15,8 +15,12 @@ async function getAllOperations(req, res) {
 
 async function createOperation(req, res) {
     try {
-        const { userId, date, categoryId, amount, currency, description } = req.body;
-        const operationId = await db.createOperation(userId, date, categoryId, amount, currency, description);
+        // ОНОВЛЕНО: Тепер приймаємо нові поля, які відповідають новій таблиці Operations
+        const { userId, date, limitId, amount, currency, category, description, type } = req.body;
+        
+        const operationId = await db.createOperation(
+            userId, date, limitId, amount, currency, category, description, type
+        );
         res.status(201).json({ operation_id: operationId });
     } catch (err) {
         console.error("Помилка createOperation:", err.toString());
@@ -25,7 +29,7 @@ async function createOperation(req, res) {
 }
 
 async function exportTransactions(req, res) {
-    const userId = req.user.id; // Беремо з middleware авторизації
+    const userId = req.user.id;
 
     try {
         console.log('Експорт операцій для користувача', userId);

@@ -495,6 +495,7 @@
   </div>
 </template>
 
+
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import Chart from 'chart.js/auto';
@@ -504,7 +505,6 @@ const showTokenForm = ref(false);
 // Auth state
 const isLoggedIn = ref(false);
 const error = ref(null);
-// const router = useRouter();
 const showRegistration = ref(false);
 const loginForm = ref({
   email: '',
@@ -525,10 +525,11 @@ const user = ref({
 });
 
 const userInitials = computed(() => {
+  if (!user.value.name) return 'U';
   return user.value.name.charAt(0).toUpperCase();
 });
 
-const categoryExpenses = ref([]);  // Змінна для витрат за категоріями
+const categoryExpenses = ref([]);
 
 // App state
 const showTransactionForm = ref(false);
@@ -539,57 +540,61 @@ const currentMonthDelta = ref(0);
 const totalSavings = ref(0);
 const savingsAmount = ref(null);
 const selectedGoalId = ref(null);
+
+// ЗМІНА: Формат дати для PostgreSQL (YYYY-MM-DD)
 const newTransaction = ref({
   type: 'expense',
   amount: null,
   category: '',
   description: '',
-  date: new Date().toLocaleDateString('uk-UA')
+  date: new Date().toISOString().split('T')[0] 
 });
+
 const newGoal = ref({
   name: '',
   target: null,
   current: 0
 });
 
-
-// Budget categories
+// Budget categories (Тепер це Ліміти)
 const budgetCategories = ref([]);
+
+// ЗМІНА: Логіка фільтрації категорій
 const filteredCategories = computed(() => {
   if (newTransaction.value.type === 'expense') {
-    return budgetCategories.value.filter(c => c.direction === 'expense');
+    // Для витрат показуємо створені ліміти
+    return budgetCategories.value;
   } else if (newTransaction.value.type === 'income') {
-    return budgetCategories.value.filter(c => c.direction === 'income');
-  } else {
-    return [];
+    // Для доходів даємо стандартні варіанти
+    return [
+      { name: 'Зарплата' },
+      { name: 'Підробіток' },
+      { name: 'Інвестиції' },
+      { name: 'Інше' }
+    ];
   }
+  return [];
 });
 
 
 // Transactions
 const transactions = ref([]);
-
 // Savings goals
 const savingsGoals = ref([]);
 
-//grafics
+// grafics
 const selectedYear = ref(new Date().getFullYear());
 const selectedMonth = ref(new Date().getMonth() + 1);
 const availableYears = ref([]);
 const availableMonths = ref([
-  { value: 1, name: 'Січень' },
-  { value: 2, name: 'Лютий' },
-  { value: 3, name: 'Березень' },
-  { value: 4, name: 'Квітень' },
-  { value: 5, name: 'Травень' },
-  { value: 6, name: 'Червень' },
-  { value: 7, name: 'Липень' },
-  { value: 8, name: 'Серпень' },
-  { value: 9, name: 'Вересень' },
-  { value: 10, name: 'Жовтень' },
-  { value: 11, name: 'Листопад' },
-  { value: 12, name: 'Грудень' }
+  { value: 1, name: 'Січень' }, { value: 2, name: 'Лютий' },
+  { value: 3, name: 'Березень' }, { value: 4, name: 'Квітень' },
+  { value: 5, name: 'Травень' }, { value: 6, name: 'Червень' },
+  { value: 7, name: 'Липень' }, { value: 8, name: 'Серпень' },
+  { value: 9, name: 'Вересень' }, { value: 10, name: 'Жовтень' },
+  { value: 11, name: 'Листопад' }, { value: 12, name: 'Грудень' }
 ]);
+
 const categoryExpensesChart = ref(null);
 const incomeVsExpenseChart = ref(null);
 const expenseTrendChart = ref(null);
@@ -598,19 +603,14 @@ const expenseTrendData = ref([]);
 const newCategoryName = ref('');
 const showTargetForm = ref(false);
 
-// const userId = localStorage.getItem('userId');
-
-// Computed properties
-
 const getUniqueYears = computed(() => {
   const years = transactions.value.map(t => {
-    // Extract year from date (assuming format DD.MM.YYYY)
-    const dateParts = t.date.split('.');
-    return parseInt(dateParts[2]);
+    // Postgres повертає дату як рядок YYYY-MM-DD або об'єкт Date
+    const dateObj = new Date(t.date);
+    return dateObj.getFullYear();
   });
-  return [...new Set(years)].sort((a, b) => a - b);
+  return [...new Set(years)].filter(y => !isNaN(y)).sort((a, b) => a - b);
 });
-
 
 const filteredTransactions = computed(() => {
   if (transactionType.value === 'all') {
@@ -619,16 +619,16 @@ const filteredTransactions = computed(() => {
   return transactions.value.filter(t => t.type === transactionType.value);
 });
 
-
-//  a watch to update availableYears when transactions change
 watch(transactions, () => {
-  availableYears.value = getUniqueYears.value;
-  if (!availableYears.value.includes(selectedYear.value)) {
-    selectedYear.value = availableYears.value[availableYears.value.length - 1] || new Date().getFullYear();
+  const years = getUniqueYears.value;
+  if (years.length > 0) {
+    availableYears.value = years;
+    if (!availableYears.value.includes(selectedYear.value)) {
+      selectedYear.value = availableYears.value[availableYears.value.length - 1];
+    }
   }
 }, { deep: true });
 
-//  a watch to reload charts when filters change
 watch([selectedYear, selectedMonth], () => {
   loadChartData();
   renderCharts();
@@ -642,10 +642,9 @@ watch(activeTab, (newVal) => {
   }
 });
 
-const bankToken = ref ('');
+const bankToken = ref('');
 const dateFrom = ref('');
 const dateTo = ref('');
-// Methods
 
 function toggleTokenForm() {
   showTokenForm.value = !showTokenForm.value;
@@ -656,7 +655,6 @@ async function saveBankToken() {
     alert('Будь ласка, введіть токен.');
     return;
   }
-
   try {
     const res = await fetch(`http://localhost:3000/api/monobank/token/${user.value.id}`, {
       method: 'POST',
@@ -681,208 +679,100 @@ async function saveBankToken() {
   }
 }
 
-
 const mccCategories = {
-  // Продукти
-  5411: 'Продукти',
-  5499: 'Делікатеси / Магазини здорової їжі',
-
-  // Ресторани та кафе
-  5812: 'Ресторани',
-  5814: 'Фастфуд',
-  5811: 'Кейтеринг',
-
-  // Одяг та взуття
-  5651: 'Одяг',
-  5661: 'Взуття',
-
-  // Покупки та супермаркети
-  5311: 'Універмаги',
-  5399: 'Магазини товарів загального призначення',
-  5941: 'Канцелярія',
-  5942: 'Книгарні',
-  5943: 'Паперові вироби / Сувеніри',
-  5999: 'Інші роздрібні магазини',
-
-  // Транспорт
-  4111: 'Автобуси',
-  4121: 'Таксі',
-  4789: 'Інші транспортні послуги',
-  5541: 'АЗС',
-  5542: 'Паливо (самообслуговування)',
-  7512: 'Оренда авто',
-
-  // Комунальні послуги
-  4900: 'Комунальні платежі',
-  4814: 'Телефонія / Інтернет',
-
-  // Житло
-  7011: 'Готелі / Проживання',
-  6513: 'Оренда житла',
-
-  // Аптеки та медицина
-  5912: 'Аптеки',
-  8062: 'Медичні послуги',
-  8011: 'Лікарі',
-
-  // Розваги
-  7832: 'Кінотеатри',
-  7922: 'Театри / Концерти',
-  7996: 'Парки розваг',
-  7994: 'Ігрові клуби',
-  7995: 'Гемблінг / Азартні ігри',
-
-  // Спорт
-  7941: 'Спортивні події',
-  7997: 'Клуби здоровʼя / Фітнес',
-  7999: 'Інші розваги',
-
-  // Освіта
-  8211: 'Школи',
-  8220: 'Коледжі / Університети',
-  8299: 'Інші освітні послуги',
-
-  // Перекази
-  4829: 'Перекази',
-  6536: 'Грошові перекази',
-  6012: 'Фінансові послуги',
-  6051: 'Небанківські перекази',
-
-  // Зняття готівки
-  6011: 'Зняття готівки в банкоматі',
-
-  // Подорожі
-  4722: 'Туристичні агенції',
-  4511: 'Авіалінії',
-  3000: 'Готелі / Курорти',
-  3501: 'Оренда авто',
-  4411: 'Круїзи',
-
-  // Платежі онлайн / Підписки
-  4899: 'Онлайн-сервіси / Підписки',
-  5734: 'Цифрові продукти',
-  5815: 'Цифрові гаманці (наприклад, PayPal)',
-
-  // Інше
-  9999: 'Інше',
+  5411: 'Продукти', 5499: 'Делікатеси', 5812: 'Ресторани', 5814: 'Фастфуд',
+  5651: 'Одяг', 5661: 'Взуття', 5311: 'Універмаги', 4111: 'Автобуси',
+  4121: 'Таксі', 5541: 'АЗС', 4900: 'Комунальні платежі', 5912: 'Аптеки',
+  8062: 'Медичні послуги', 7832: 'Кінотеатри', 7997: 'Спорт', 4829: 'Перекази',
+  6011: 'Зняття готівки', 4899: 'Підписки'
 };
 
-
-
 const fetchTransactions = async () => {
-    if (!dateFrom.value || !dateTo.value) {
-      alert('Введіть обидві дати');
-      return;
-    }
-    const fromTimestamp = Math.floor(new Date(dateFrom.value).getTime());
-    const toTimestamp = Math.floor(new Date(dateTo.value).getTime());
+  if (!dateFrom.value || !dateTo.value) {
+    alert('Введіть обидві дати');
+    return;
+  }
+  const fromTimestamp = Math.floor(new Date(dateFrom.value).getTime());
+  const toTimestamp = Math.floor(new Date(dateTo.value).getTime());
 
-    const res = await fetch(`http://localhost:3000/api/monobank/transactions/${user.value.id}/${fromTimestamp}/${toTimestamp}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
-    });
+  const res = await fetch(`http://localhost:3000/api/monobank/transactions/${user.value.id}/${fromTimestamp}/${toTimestamp}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${localStorage.getItem('token')}`,
+    },
+  });
 
-    const data = await res.json();
-    //
-    console.log('Статус відповіді сервера:', res.status);
-    console.log('Дані, які ми намагаємось перебрати:', data);
-    // -----------------------------------
+  const data = await res.json();
 
-    // Перевірка: якщо data не є масивом, зупиняємо функцію, щоб не було помилки "not iterable"
-    if (!Array.isArray(data)) {
-        console.error('Очікувався масив, але отримано:', typeof data);
-        return; // Виходимо з функції
-    }
+  if (!Array.isArray(data)) {
+    console.error('Очікувався масив, але отримано:', typeof data);
+    return;
+  }
 
-    for (const item of data) {
-      newTransaction.value = {
-        type: 'expense',
-        amount: null,
-        category: '',
-        description: '',
-        date: new Date().toLocaleDateString('uk-UA')
-      };
+  for (const item of data) {
+    const txDate = new Date(item.time * 1000);
+    newTransaction.value = {
+      type: item.amount < 0 ? "expense" : "income",
+      amount: Number(Math.abs(item.amount) / 100),
+      category: mccCategories[item.mcc] || 'Інше',
+      description: item.description,
+      date: txDate.toISOString().split('T')[0] // Формат YYYY-MM-DD
+    };
+    await addTransaction();
+  }
 
-      newTransaction.value.type = item.amount < 0 ? "expense" : "income";
-      newTransaction.value.amount = Number(Math.abs(item.amount)/100);
-      newTransaction.value.monobank_id = item.id;//поломане айді 
-      newTransaction.value.date = new Date(item.time * 1000).toLocaleDateString('uk-UA');
-      newTransaction.value.user = user.value.id;
-      newTransaction.value.currency = 'UAH';
-      //newTransaction.value.category = item.amount < 0 ? "Продукти" : "Зарплата";
-      newTransaction.value.category = mccCategories[item.mcc] || 'Інше';
-      newTransaction.value.description = item.description;
-      addTransaction();
-    }
-
-
-    if (res.ok) {
-      console.log("Транзакції:", data);
-      alert("Транзакції успішно отримані!");
-    } else {
-      alert(data.message || 'Помилка отримання транзакцій');
-    }
-  };
+  if (res.ok) {
+    alert("Транзакції успішно отримані!");
+  } else {
+    alert(data.message || 'Помилка отримання транзакцій');
+  }
+};
 
 async function addNewCategory() {
   try {
-
-    const direction = newTransaction.value.type;
-    console.log("type of transaction:", direction)
-
     const res = await fetch('http://localhost:3000/api/categories', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${localStorage.getItem('token')}`
       },
-      
-      body: JSON.stringify({ name: newCategoryName.value, userId: user.value.id,  direction: direction })
+      // ЗМІНА: Замість direction відправляємо стартовий target (0)
+      body: JSON.stringify({ name: newCategoryName.value, userId: user.value.id, target: 0 })
     });
 
-    const text = await res.text();
-    console.log('Сирий текст з респонсу:', text);
-
-    try {
-      const data = JSON.parse(text);
-      if (data.success) {
-        alert('Категорію додано!');
-        await loadCategories();
-      } else {
-        console.error('Помилка з сервера:', data.message);
-      }
-    } catch (err) {
-      console.error('❌ Неможливо розпарсити JSON:', err);
-      alert('Сталася помилка. Сервер не повернув JSON.');
+    const data = await res.json();
+    if (data.success) {
+      alert('Ліміт додано!');
+      newCategoryName.value = '';
+      await loadCategories();
+    } else {
+      console.error('Помилка з сервера:', data.message);
     }
   } catch (err) {
     console.error('❌ Запит не відбувся:', err);
   }
 }
 
-const themes = ['light', 'dark', 'pink']
-const theme = ref(localStorage.getItem('theme') || 'light')
+const themes = ['light', 'dark', 'pink'];
+const theme = ref(localStorage.getItem('theme') || 'light');
 
 const toggleTheme = () => {
-  const currentIndex = themes.indexOf(theme.value)
-  const nextIndex = (currentIndex + 1) % themes.length
-  theme.value = themes[nextIndex]
-  document.documentElement.setAttribute('data-theme', theme.value)
-  localStorage.setItem('theme', theme.value)
+  const currentIndex = themes.indexOf(theme.value);
+  const nextIndex = (currentIndex + 1) % themes.length;
+  theme.value = themes[nextIndex];
+  document.documentElement.setAttribute('data-theme', theme.value);
+  localStorage.setItem('theme', theme.value);
 }
 
 async function updateCategoryTarget(category) {
-  console.log("category = ", category);
   const res = await fetch('http://localhost:3000/api/categories/target', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${localStorage.getItem('token')}`
     },
-    body: JSON.stringify({ categoryId: category.id, target: category.target, userId: user.value.id })
+    body: JSON.stringify({ categoryId: category.id, target: category.budget, userId: user.value.id })
   });
 
   const data = await res.json();
@@ -891,9 +781,8 @@ async function updateCategoryTarget(category) {
 }
 
 async function deleteCategory(category) {
-  const confirmed = confirm("Ви впевнені, що хочете видалити категорію?");
+  const confirmed = confirm("Ви впевнені, що хочете видалити цей ліміт?");
   if (!confirmed) return;
-  
 
   const res = await fetch(`http://localhost:3000/api/categories/`, {
     method: 'DELETE',
@@ -901,12 +790,12 @@ async function deleteCategory(category) {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${localStorage.getItem('token')}`
     },
-    body: JSON.stringify({categoryId: category.id, userId: user.value.id})
+    body: JSON.stringify({ categoryId: category.id, userId: user.value.id })
   });
 
   const data = await res.json();
   if (data.success) {
-    alert('Категорію видалено!');
+    alert('Ліміт видалено!');
     await loadCategories();
   } else {
     alert('Помилка видалення');
@@ -924,47 +813,46 @@ async function addTransaction() {
     if (!token) {
       isLoggedIn.value = false;
       localStorage.removeItem('token');
+      return;
+    }
+    
+    // Шукаємо, чи є для цієї транзакції відповідний ліміт
+    const selectedLimit = budgetCategories.value.find(c => c.name === newTransaction.value.category);
+    const userId = user.value.id;
+
+    // ЗМІНА: Новий payload під нову структуру БД
+    const response = await fetch(`http://localhost:3000/api/operations/add`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        userId: userId,
+        date: newTransaction.value.date,
+        limitId: selectedLimit ? selectedLimit.id : null,
+        category: newTransaction.value.category,
+        amount: Number(newTransaction.value.amount),
+        currency: 'UAH',
+        description: newTransaction.value.description,
+        type: newTransaction.value.type
+      })
+    });
+
+    if (response.ok) {
+      newTransaction.value = {
+        type: 'expense',
+        amount: null,
+        category: '',
+        description: '',
+        date: new Date().toISOString().split('T')[0]
+      };
+      
+      loadTransactions();
+      loadCategories(); // Оновлюємо ліміти, щоб побачити залишок
+      showTransactionForm.value = false;
     } else {
-      const category = budgetCategories.value.find(c => c.name === newTransaction.value.category);
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const userId = payload.id;
-
-      const response = await fetch(`http://localhost:3000/api/operations/add`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          userId: userId,
-          date: newTransaction.value.date,
-          categoryId: category.id,
-          amount: Number(newTransaction.value.amount),
-          currency: 'UAH',
-          description: newTransaction.value.description
-        })
-      });
-      // console.log('Транзакція:', response);
-      if (response.ok) {
-        // const data = await response.json();
-        // console.log('Транзакція додана:', data);
-
-        // Скинути форму
-        newTransaction.value = {
-          type: 'expense',
-          amount: null,
-          category: '',
-          description: '',
-          date: new Date().toLocaleDateString('uk-UA')
-        };
-
-        loadTransactions();
-        loadUserInfo();
-
-        showTransactionForm.value = false;
-      } else {
-        console.error('Помилка додавання транзакції');
-      }
+      console.error('Помилка додавання транзакції');
     }
   } catch (error) {
     console.error(error);
@@ -975,16 +863,12 @@ async function downloadExcel() {
   try {
     const res = await fetch(`http://localhost:3000/api/operations/export/${user.value.id}`, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`
-      }
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
     });
-
     if (!res.ok) throw new Error('Помилка експорту');
 
     const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);
-
     const a = document.createElement('a');
     a.href = url;
     a.download = 'transactions.xlsx';
@@ -997,7 +881,6 @@ async function downloadExcel() {
 
 const exportChartsToPDF = () => {
   const doc = new jsPDF();
-
   const charts = [
     { id: 'categoryExpensesChart', title: 'Витрати за категоріями' },
     { id: 'incomeVsExpenseChart', title: 'Доходи vs Витрати' },
@@ -1005,7 +888,6 @@ const exportChartsToPDF = () => {
   ];
 
   let yOffset = 10;
-
   charts.forEach((chart) => {
     const canvas = document.getElementById(chart.id);
     if (canvas) {
@@ -1016,7 +898,6 @@ const exportChartsToPDF = () => {
       yOffset += 90;
     }
   });
-
   doc.save("Фінансова-аналітика.pdf");
 };
 
@@ -1025,19 +906,11 @@ async function addSavingsGoal() {
     alert('Будь ласка, заповніть всі поля');
     return;
   }
-
   try {
     const token = localStorage.getItem('token');
-    if (!token) {
-      isLoggedIn.value = false;
-      localStorage.removeItem('token');
-      return;
-    }
+    if (!token) return;
 
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    const userId = payload.id;
-
-    const response = await fetch(`http://localhost:3000/api/savings/${userId}`, {
+    const response = await fetch(`http://localhost:3000/api/savings/${user.value.id}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1051,15 +924,7 @@ async function addSavingsGoal() {
 
     if (response.ok) {
       loadSavings();
-
-      // Скинути форму
-      newGoal.value = {
-        name: '',
-        target: null,
-        current: 0
-      };
-    } else {
-      console.error('Помилка додавання мети накопичень');
+      newGoal.value = { name: '', target: null, current: 0 };
     }
   } catch (error) {
     console.error(error);
@@ -1067,45 +932,32 @@ async function addSavingsGoal() {
 }
 
 async function addToSavings() {
-  // Перевірка, чи введена сума
   if (!savingsAmount.value) {
     alert('Будь ласка, введіть суму');
     return;
   }
-
   const token = localStorage.getItem('token');
-  if (!token) {
-    isLoggedIn.value = false;
-    localStorage.removeItem('token');
-  } else {
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const userId = payload.id;
+  if (!token) return;
+  
+  try {
+    const response = await fetch(`http://localhost:3000/api/savings/${user.value.id}/${selectedGoalId.value}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ amount: Number(savingsAmount.value) })
+    });
 
-      const response = await fetch(`http://localhost:3000/api/savings/${userId}/${selectedGoalId.value}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          amount: Number(savingsAmount.value)
-        })
-      });
-
-      if (response.ok) {
-        loadSavings();
-        // Скидання форми
-        savingsAmount.value = null;
-        selectedGoalId.value = null;
-      } else {
-        console.error('Помилка додавання до накопичень');
-        alert('Не вдалося додати суму до накопичень. Спробуйте ще раз.');
-      }
-    } catch (error) {
-      console.error(error);
-      alert('Сталася помилка. Спробуйте ще раз.');
+    if (response.ok) {
+      loadSavings();
+      savingsAmount.value = null;
+      selectedGoalId.value = null;
+    } else {
+      alert('Не вдалося додати суму до накопичень. Спробуйте ще раз.');
     }
+  } catch (error) {
+    console.error(error);
   }
 }
 
@@ -1113,29 +965,15 @@ async function deleteGoal(goalId) {
   if (confirm('Чи точно видалити цю ціль накопичення?')) {
     try {
       const token = localStorage.getItem('token');
-      if (!token) {
-        isLoggedIn.value = false;
-        localStorage.removeItem('token');
-        return;
-      }
+      if (!token) return;
 
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const userId = payload.id;
-
-      const response = await fetch(`http://localhost:3000/api/savings/${userId}/${goalId}`, {
+      const response = await fetch(`http://localhost:3000/api/savings/${user.value.id}/${goalId}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       if (response.ok) {
-        const data = await response.json();
-        console.log('Накопичення видалено:', data);
-
         loadSavings();
-      } else {
-        console.error('Помилка видалення накопичення');
       }
     } catch (error) {
       console.error(error);
@@ -1144,15 +982,12 @@ async function deleteGoal(goalId) {
 }
 
 function formatNumber(number) {
-  if (number === undefined || number === null) {
-    return '0';
-  }
-  
-  // Якщо значення є, перетворюємо його на число і форматуємо
+  if (number === undefined || number === null) return '0';
   return Number(number).toLocaleString();
 }
 
 function getProgressColor(spent, budget) {
+  if (!budget || budget === 0) return 'progress-green';
   const percentage = (spent / budget) * 100;
   if (percentage < 50) return 'progress-green';
   if (percentage < 75) return 'progress-yellow';
@@ -1174,10 +1009,10 @@ async function login() {
       const payload = JSON.parse(atob(data.token.split('.')[1]));
       user.value.name = payload.name;
       user.value.id = payload.id;
+      
       loadTransactions();
       loadCategories();
       loadUserInfo();
-      loadReports();
       loadChartData();
     } else {
       const data = await response.text();
@@ -1196,7 +1031,7 @@ async function logout() {
     if (token) {
       await fetch('http://localhost:3000/api/auth/logout', {
         method: 'POST',
-        headers: {Authorization: `Bearer ${token}`}
+        headers: { Authorization: `Bearer ${token}` }
       });
       localStorage.removeItem('token');
       isLoggedIn.value = false;
@@ -1220,11 +1055,8 @@ async function register() {
       if (response.ok) {
         const data = await response.json();
         localStorage.setItem('token', data.token);
-        // isLoggedIn.value = true;
         showRegistration.value = false;
-        // router.push('/protected');
       } else {
-        localStorage.removeItem('token');
         const data = await response.text();
         alert(data);
       }
@@ -1240,30 +1072,21 @@ async function register() {
 async function loadTransactions() {
   try {
     const token = localStorage.getItem('token');
-    if (!token) {
-      isLoggedIn.value = false;
-      localStorage.removeItem('token');
-    } else {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      user.value.name = payload.name;
-      user.value.id = payload.id;
+    if (!token) return;
 
-      const response = await fetch(`http://localhost:3000/api/operations/${user.value.id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+    const response = await fetch(`http://localhost:3000/api/operations/${user.value.id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        transactions.value = data.map(operation => ({
-          date: operation.Operation_date,
-          category: operation.Operation_category,
-          description: operation.Operation_description,
-          amount: operation.Amount,
-          type: operation.Operation_direction
-        }));
-      } else {
-        console.error('Помилка отримання операцій');
-      }
+    if (response.ok) {
+      const data = await response.json();
+      transactions.value = data.map(operation => ({
+        date: operation.operation_date,
+        category: operation.operation_category,
+        description: operation.operation_description,
+        amount: operation.amount,
+        type: operation.operation_direction
+      }));
     }
   } catch (error) {
     console.error(error);
@@ -1273,30 +1096,22 @@ async function loadTransactions() {
 async function loadCategories() {
   try {
     const token = localStorage.getItem('token');
-    if (!token) {
-      isLoggedIn.value = false;
-      localStorage.removeItem('token');
-    } else {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      user.value.name = payload.name;
-      user.value.id = payload.id;
+    if (!token) return;
 
-      const response = await fetch(`http://localhost:3000/api/categories/${user.value.id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+    const response = await fetch(`http://localhost:3000/api/categories/${user.value.id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        budgetCategories.value = data.map(category => ({
-          id: category.code,
-          name: category.name,
-          budget: category.target,
-          spent: category.spent,
-          direction: category.direction
-        }));
-      } else {
-        console.error('Помилка отримання операцій');
-      }
+    if (response.ok) {
+      const data = await response.json();
+      // ЗМІНА: Мапінг полів згідно з новою в'юхою vLimitsState
+      budgetCategories.value = data.map(limit => ({
+        id: limit.limit_code,
+        name: limit.limit_name,
+        budget: Number(limit.target),
+        spent: Number(limit.spent_this_month),
+        remaining: Number(limit.current_remaining)
+      }));
     }
   } catch (error) {
     console.error(error);
@@ -1306,61 +1121,20 @@ async function loadCategories() {
 async function loadSavings() {
   try {
     const token = localStorage.getItem('token');
-    if (!token) {
-      isLoggedIn.value = false;
-      localStorage.removeItem('token');
-    } else {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      user.value.name = payload.name;
-      user.value.id = payload.id;
+    if (!token) return;
 
-      const response = await fetch(`http://localhost:3000/api/savings/${user.value.id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+    const response = await fetch(`http://localhost:3000/api/savings/${user.value.id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        // console.log(data);
-        savingsGoals.value = data.map(saving => ({
-          id: saving.code,
-          name: saving.title,
-          target: saving.target,
-          current: saving.current
-        }));
-      } else {
-        console.error('Помилка отримання накопичень');
-      }
-    }
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-async function loadReports() {
-  try {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      isLoggedIn.value = false;
-      localStorage.removeItem('token');
-    } else {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      user.value.name = payload.name;
-      user.value.id = payload.id;
-
-      const response = await fetch(`http://localhost:3000/api/reports/category-expenses/${user.value.id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      console.log("report:", response);
-      if (response.ok) {
-        const data = await response.json();
-        categoryExpenses.value = data.map(report => ({
-          category: report.category_name,
-          amount: report.total_amount
-        }));
-        console.log('Category expences: ', categoryExpenses);
-      } else {
-        console.error('Помилка отримання витрат за категоріями');
-      }
+    if (response.ok) {
+      const data = await response.json();
+      savingsGoals.value = data.map(saving => ({
+        id: saving.code,
+        name: saving.title,
+        target: saving.target,
+        current: saving.current
+      }));
     }
   } catch (error) {
     console.error(error);
@@ -1370,59 +1144,37 @@ async function loadReports() {
 async function loadCategoryExpenses() {
   try {
     const token = localStorage.getItem('token');
-    if (!token) throw new Error('Token not found');
+    if (!token) return;
 
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    const userId = payload.id;
-    if (!userId) throw new Error('User ID not found in token');
-
-    const response = await fetch(`http://localhost:3000/api/reports/category-expenses/${userId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
+    const response = await fetch(`http://localhost:3000/api/reports/category-expenses/${user.value.id}`, {
+      headers: { Authorization: `Bearer ${token}` }
     });
 
-    console.log("report:", response);
-
-    if (!response.ok) {
-      const msg = await response.text();
-      throw new Error(`HTTP ${response.status}: ${msg}`);
+    if (response.ok) {
+      const data = await response.json();
+      categoryExpenses.value = data;
     }
-
-    const data = await response.json();
-    categoryExpenses.value = data;
-    console.log('Завантажено categoryExpenses:', data);
   } catch (err) {
-    console.error('Помилка при завантаженні витрат за категоріями:', err.message);
+    console.error(err);
   }
 }
 
 async function loadUserInfo() {
   try {
     const token = localStorage.getItem('token');
-    if (!token) {
-      isLoggedIn.value = false;
-      localStorage.removeItem('token');
-    } else {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      user.value.name = payload.name;
-      user.value.id = payload.id;
+    if (!token) return;
 
-      const response = await fetch(`http://localhost:3000/api/users/${user.value.id}`, {
-        headers: {Authorization: `Bearer ${token}`}
-      });
+    const response = await fetch(`http://localhost:3000/api/users/${user.value.id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.length > 0) {
-          totalCapital.value = data[0].amount;
-          currentMonthDelta.value = data[0].current_month;
-          totalSavings.value = data[0].savings;
-        } else {
-          console.error('Відповідь порожня');
-        }
-      } else {
-        console.error('Помилка отримання даних');
+    if (response.ok) {
+      const data = await response.json();
+      if (data.length > 0) {
+        // Залишив як було, хоча можливо доведеться адаптувати під нову логіку
+        totalCapital.value = data[0].amount || 0;
+        currentMonthDelta.value = data[0].current_month || 0;
+        totalSavings.value = data[0].total_savings || 0;
       }
     }
   } catch (error) {
@@ -1432,24 +1184,18 @@ async function loadUserInfo() {
 
 async function loadChartData() {
   const now = new Date();
-  const year = selectedYear?.value || now.getFullYear();
-  const month = selectedMonth?.value || (now.getMonth() + 1);
+  const year = selectedYear.value || now.getFullYear();
+  const month = selectedMonth.value || (now.getMonth() + 1);
+  
   try {
     const token = localStorage.getItem('token');
-    if (!token) {
-      isLoggedIn.value = false;
-      localStorage.removeItem('token');
-      return;
-    }
+    if (!token) return;
 
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    const userId = payload.id;
+    const userId = user.value.id;
 
-    // Load category expenses
     const categoryResponse = await fetch(`http://localhost:3000/api/reports/category-expenses/${userId}?year=${year}&month=${month}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-
     if (categoryResponse.ok) {
       const data = await categoryResponse.json();
       categoryExpenses.value = data.map(report => ({
@@ -1458,20 +1204,16 @@ async function loadChartData() {
       }));
     }
 
-    // Load income vs expense data
-    const incomeVsExpenseResponse = await fetch(`http://localhost:3000/api/reports/incvsexp/${userId}?year=${selectedYear.value}&month=${selectedMonth.value}`, {
+    const incomeVsExpenseResponse = await fetch(`http://localhost:3000/api/reports/incvsexp/${userId}?year=${year}&month=${month}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-
     if (incomeVsExpenseResponse.ok) {
       incomeVsExpenseData.value = await incomeVsExpenseResponse.json();
     }
 
-    // Load expense trend data (last 6 months)
-    const trendResponse = await fetch(`http://localhost:3000/api/reports/expense-trend/${userId}?year=${selectedYear.value}&month=${selectedMonth.value}`, {
+    const trendResponse = await fetch(`http://localhost:3000/api/reports/expense-trend/${userId}?year=${year}&month=${month}`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-
     if (trendResponse.ok) {
       expenseTrendData.value = await trendResponse.json();
     }
@@ -1490,10 +1232,7 @@ function renderCategoryExpensesChart() {
   const ctx = document.getElementById('categoryExpensesChart');
   if (!ctx) return;
   
-  if (categoryExpensesChart.value) {
-    categoryExpensesChart.value.destroy();
-  }
-  
+  if (categoryExpensesChart.value) categoryExpensesChart.value.destroy();
   if (categoryExpenses.value.length === 0) return;
   
   categoryExpensesChart.value = new Chart(ctx, {
@@ -1512,13 +1251,8 @@ function renderCategoryExpensesChart() {
     options: {
       responsive: true,
       plugins: {
-        legend: {
-          position: 'right',
-        },
-        title: {
-          display: true,
-          text: 'Витрати за категоріями'
-        }
+        legend: { position: 'right' },
+        title: { display: true, text: 'Витрати за категоріями' }
       }
     }
   });
@@ -1528,13 +1262,9 @@ function renderIncomeVsExpenseChart() {
   const ctx = document.getElementById('incomeVsExpenseChart');
   if (!ctx) return;
   
-  if (incomeVsExpenseChart.value) {
-    incomeVsExpenseChart.value.destroy();
-  }
-  
+  if (incomeVsExpenseChart.value) incomeVsExpenseChart.value.destroy();
   if (incomeVsExpenseData.value.length === 0) return;
   
-  // Process data for chart
   const incomeData = {};
   const expenseData = {};
   
@@ -1553,45 +1283,17 @@ function renderIncomeVsExpenseChart() {
     data: {
       labels: months,
       datasets: [
-        {
-          label: 'Доходи',
-          data: months.map(month => incomeData[month] || 0),
-          backgroundColor: '#10b981',
-          borderColor: '#059669',
-          borderWidth: 1
-        },
-        {
-          label: 'Витрати',
-          data: months.map(month => expenseData[month] || 0),
-          backgroundColor: '#ef4444',
-          borderColor: '#dc2626',
-          borderWidth: 1
-        }
+        { label: 'Доходи', data: months.map(m => incomeData[m] || 0), backgroundColor: '#10b981', borderColor: '#059669', borderWidth: 1 },
+        { label: 'Витрати', data: months.map(m => expenseData[m] || 0), backgroundColor: '#ef4444', borderColor: '#dc2626', borderWidth: 1 }
       ]
     },
     options: {
       responsive: true,
       scales: {
-        y: {
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'Сума (UAH)'
-          }
-        },
-        x: {
-          title: {
-            display: true,
-            text: 'Місяць'
-          }
-        }
+        y: { beginAtZero: true, title: { display: true, text: 'Сума (UAH)' } },
+        x: { title: { display: true, text: 'Місяць' } }
       },
-      plugins: {
-        title: {
-          display: true,
-          text: 'Доходи vs Витрати'
-        }
-      }
+      plugins: { title: { display: true, text: 'Доходи vs Витрати' } }
     }
   });
 }
@@ -1600,16 +1302,10 @@ function renderExpenseTrendChart() {
   const ctx = document.getElementById('expenseTrendChart');
   if (!ctx) return;
 
-  if (expenseTrendChart.value) {
-    expenseTrendChart.value.destroy();
-  }
-
+  if (expenseTrendChart.value) expenseTrendChart.value.destroy();
   if (expenseTrendData.value.length === 0) return;
 
-  // Sort data by date
-  const sortedData = [...expenseTrendData.value].sort((a, b) => {
-    return new Date(a.date) - new Date(b.date);
-  });
+  const sortedData = [...expenseTrendData.value].sort((a, b) => new Date(a.date) - new Date(b.date));
 
   expenseTrendChart.value = new Chart(ctx, {
     type: 'line',
@@ -1626,41 +1322,33 @@ function renderExpenseTrendChart() {
     options: {
       responsive: true,
       scales: {
-        y: {
-          beginAtZero: true,
-          title: {
-            display: true,
-            text: 'Сума (UAH)'
-          }
-        },
-        x: {
-          title: {
-            display: true,
-            text: 'Дата'
-          }
-        }
+        y: { beginAtZero: true, title: { display: true, text: 'Сума (UAH)' } },
+        x: { title: { display: true, text: 'Дата' } }
       },
-      plugins: {
-        title: {
-          display: true,
-          text: 'Тренд витрат'
-        }
-      }
+      plugins: { title: { display: true, text: 'Тренд витрат' } }
     }
   });
 }
 
 onMounted(() => {
- document.documentElement.setAttribute('data-theme', theme.value)
-  loadTransactions();
-  loadCategories();
-  loadCategoryExpenses(); 
-  loadUserInfo();
-  loadSavings();
-  //loadReports();
-  loadChartData();
+  document.documentElement.setAttribute('data-theme', theme.value);
+  const token = localStorage.getItem('token');
+  if (token) {
+    isLoggedIn.value = true;
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    user.value.name = payload.name;
+    user.value.id = payload.id;
+    
+    loadTransactions();
+    loadCategories();
+    loadCategoryExpenses(); 
+    loadUserInfo();
+    loadSavings();
+    loadChartData();
+  }
 });
 </script>
+
 
 <style>
 .transaction-form-container {

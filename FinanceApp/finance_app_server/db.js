@@ -4,9 +4,9 @@ const jwt = require("jsonwebtoken")
 
 // підключення до бази постгрес
 const pool = new Pool({
-  user: "eugene",       // Твій користувач у Postgres
+  user: "eugene",       //  користувач у Postgres
   host: "localhost",
-  database: "postgres",   // Твоя база даних
+  database: "financedbp",   //  база даних
   password: "",    
   port: 5432,       
 })
@@ -26,6 +26,10 @@ async function cancelToken(token) {
 function isTokenInvalid(token) {
   return canceledTokens.has(token)
 }
+
+// ==========================================
+// КОРИСТУВАЧІ
+// ==========================================
 
 async function createUser(name, password) {
   const hashedPassword = await bcrypt.hash(password, 10)
@@ -58,20 +62,34 @@ async function getUserById(id) {
   }
 }
 
+async function getUserInfo(userId) {
+  try {
+    const res = await pool.query("SELECT * FROM vUserFullInfo WHERE user_id = $1", [userId])
+    return res.rows
+  } catch (err) {
+    throw err
+  }
+}
+
+// ==========================================
+// ОПЕРАЦІЇ (ТРАНЗАКЦІЇ)
+// ==========================================
+
 async function getAllOperations(userId) {
   try {
-    const res = await pool.query("SELECT * FROM vOperations WHERE User_ID = $1", [userId])
+    const res = await pool.query("SELECT * FROM vOperations WHERE User_ID = $1 ORDER BY Operation_date DESC", [userId])
     return res.rows
   } catch (err) {
     throw err
   }
 }
 
-async function createOperation(userId, date, categoryId, amount, currency, description) {
+
+async function createOperation(userId, date, limitId, amount, currency, category, description, type) {
   try {
     const res = await pool.query(
-      "INSERT INTO Operations (user_id, date, category_id, amount, currency, description) VALUES ($1, $2, $3, $4, $5, $6) RETURNING code",
-      [userId, date, categoryId, amount, currency, description]
+      "INSERT INTO Operations (user_id, date, Limit_id, amount, currency, category, description, type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING code",
+      [userId, date, limitId || null, amount, currency, category, description, type]
     )
     return res.rows[0].code
   } catch (err) {
@@ -79,33 +97,36 @@ async function createOperation(userId, date, categoryId, amount, currency, descr
   }
 }
 
-async function getAllCategories(userId) {
+// ЛІМІТИ 
+
+async function getAllLimits(userId) {
   try {
-    const res = await pool.query("SELECT * FROM vCategories WHERE user_id = $1", [userId])
+    // Беремо дані з нашої магічної в'юхи, яка рахує залишок на цей місяць
+    const res = await pool.query("SELECT * FROM vLimitsState WHERE user_id = $1 ORDER BY limit_name", [userId])
     return res.rows
   } catch (err) {
     throw err
   }
 }
 
-async function createCategory(name, userId, direction) {
+async function createLimit(name, userId, target) {
   try {
     const res = await pool.query(
-      "INSERT INTO Categories (name, user_id, direction) VALUES ($1, $2, $3) RETURNING code",
-      [name, userId, direction]
+      "INSERT INTO Limits (name, user_id, target) VALUES ($1, $2, $3) RETURNING code",
+      [name, userId, target || 0]
     )
     return res.rows[0].code
   } catch (err) {
-    console.error('❗ Postgres помилка:', err);
+    console.error('❗ Postgres помилка створення ліміту:', err);
     throw err
   }
 }
 
-async function setCategoryTarget(categoryId, userId, target) {
+async function setLimitTarget(limitId, userId, target) {
   try {
     await pool.query(
-      "DELETE FROM Categories WHERE code = $1 AND user_id = $2",
-      [categoryId, userId]
+      "UPDATE Limits SET target = $1 WHERE code = $2 AND user_id = $3",
+      [target, limitId, userId]
     )
     return true
   } catch (err) {
@@ -113,38 +134,21 @@ async function setCategoryTarget(categoryId, userId, target) {
   }
 }
 
-async function getAllOperationTypes() {
+async function deleteLimit(limitId, userId) {
   try {
-    const res = await pool.query("SELECT * FROM OperationTypes")
-    return res.rows
-  } catch (err) {
-    throw err
-  }
-}
-
-
-
-
-async function getAllOperationTypes() {
- try {
-    const res = await pool.query("SELECT * FROM OperationTypes")
-    return res.rows
-  } catch (err) {
-    throw err
-  }
-}
-
-async function createOperationType(direction, name) {
-  try {
-    const res = await pool.query(
-      "INSERT INTO OperationTypes (direction, name) VALUES ($1, $2) RETURNING code",
-      [direction, name]
+    await pool.query(
+      "DELETE FROM Limits WHERE code = $1 AND user_id = $2",
+      [limitId, userId]
     )
-    return res.rows[0].code
+    return true
   } catch (err) {
     throw err
   }
 }
+
+
+// НАКОПИЧЕННЯ 
+
 
 async function getAllSavings(userId) {
   try {
@@ -168,7 +172,7 @@ async function createSavings(userId, title, target, current) {
 }
 
 async function updateSavings(code, amount) {
- try {
+  try {
     await pool.query("UPDATE Savings SET current = current + $1 WHERE code = $2", [amount, code])
   } catch (err) {
     throw err
@@ -176,49 +180,38 @@ async function updateSavings(code, amount) {
 }
 
 async function deleteSavings(code) {
- try {
+  try {
     await pool.query("DELETE FROM Savings WHERE code = $1", [code])
   } catch (err) {
     throw err
   }
 }
 
-async function getUserInfo(userId) {
- try {
-    const res = await pool.query("SELECT * FROM vUserFullInfo WHERE user_id = $1", [userId])
-    return res.rows
-  } catch (err) {
-    throw err
-  }
-}
+// ЗВІТИ 
 
 async function getReport_incvsexp(userId, year, month) {
- let query = `
+  let query = `
         SELECT 
-            TO_CHAR(o.date, 'YYYY-MM') AS month,
-            c.direction,
-            SUM(o.amount) as total_amount
-        FROM Operations o
-        JOIN Categories c ON o.category_id = c.code
-        WHERE o.user_id = $1
+            TO_CHAR(date, 'YYYY-MM') AS month,
+            type AS direction,
+            SUM(amount) as total_amount
+        FROM Operations
+        WHERE user_id = $1
     `
-
   const params = [userId]
   let paramIndex = 2
 
   if (year) {
-    query += ` AND EXTRACT(YEAR FROM o.date) = $${paramIndex}`
+    query += ` AND EXTRACT(YEAR FROM date) = $${paramIndex}`
     params.push(year)
     paramIndex++
   }
-
   if (month) {
-    query += ` AND EXTRACT(MONTH FROM o.date) = $${paramIndex}`
+    query += ` AND EXTRACT(MONTH FROM date) = $${paramIndex}`
     params.push(month)
     paramIndex++
   }
-
-  query += ` GROUP BY month, c.direction ORDER BY month`
+  query += ` GROUP BY month, type ORDER BY month`
 
   try {
     const res = await pool.query(query, params)
@@ -227,33 +220,29 @@ async function getReport_incvsexp(userId, year, month) {
     throw err
   }
 }
-
 
 async function getReport_CatExp(userId, year, month) {
   let query = `
         SELECT 
-            c.name as category_name, 
-            SUM(o.amount) as total_amount 
-        FROM Operations o
-        JOIN Categories c ON c.code = o.category_id
-        WHERE o.user_id = $1 AND c.direction = 'expense'
+            category as category_name, 
+            SUM(amount) as total_amount 
+        FROM Operations
+        WHERE user_id = $1 AND type = 'expense'
     `
   const params = [userId]
   let paramIndex = 2
 
   if (year) {
-    query += ` AND EXTRACT(YEAR FROM o.date) = $${paramIndex}`
+    query += ` AND EXTRACT(YEAR FROM date) = $${paramIndex}`
     params.push(year)
     paramIndex++
   }
-
   if (month) {
-    query += ` AND EXTRACT(MONTH FROM o.date) = $${paramIndex}`
+    query += ` AND EXTRACT(MONTH FROM date) = $${paramIndex}`
     params.push(month)
     paramIndex++
   }
-
-  query += ` GROUP BY c.name`
+  query += ` GROUP BY category`
 
   try {
     const res = await pool.query(query, params)
@@ -262,33 +251,29 @@ async function getReport_CatExp(userId, year, month) {
     throw err
   }
 }
-
 
 async function getReport_ExpenseTrend(userId, year, month) {
   let query = `
         SELECT 
-            o.date,
-            SUM(o.amount) as amount
-        FROM Operations o
-        JOIN Categories c ON c.code = o.category_id
-        WHERE o.user_id = $1 AND c.direction = 'expense'
+            date,
+            SUM(amount) as amount
+        FROM Operations
+        WHERE user_id = $1 AND type = 'expense'
     `
   const params = [userId]
   let paramIndex = 2
 
   if (year) {
-    query += ` AND EXTRACT(YEAR FROM o.date) = $${paramIndex}`
+    query += ` AND EXTRACT(YEAR FROM date) = $${paramIndex}`
     params.push(year)
     paramIndex++
   }
-
   if (month) {
-    query += ` AND EXTRACT(MONTH FROM o.date) = $${paramIndex}`
+    query += ` AND EXTRACT(MONTH FROM date) = $${paramIndex}`
     params.push(month)
     paramIndex++
   }
-
-  query += ` GROUP BY o.date ORDER BY o.date DESC LIMIT 30`
+  query += ` GROUP BY date ORDER BY date DESC LIMIT 30`
 
   try {
     const res = await pool.query(query, params)
@@ -297,6 +282,10 @@ async function getReport_ExpenseTrend(userId, year, month) {
     throw err
   }
 }
+
+
+// БАНКІВСЬКІ ТОКЕНИ
+
 
 async function setBankToken(userId, token) {
   try {
@@ -322,64 +311,34 @@ async function getBankToken(userId) {
   }
 }
 
-async function deleteCategory(categoryId, userId) {
-  try {
-    await pool.query(
-      "DELETE FROM Categories WHERE code = $1 AND user_id = $2",
-      [categoryId, userId]
-    )
-    return true
-  } catch (err) {
-    throw err
-  }
-}
-
-// async function tempChangeBase() {
-//   return new Promise((resolve, reject) => {
-//     const sql = `
-//       DROP TABLE IF EXISTS BankTokens;
-//       CREATE TABLE BankTokens (
-//         userid INTEGER PRIMARY KEY,
-//         token TEXT
-//       );
-//     `;
-
-//     db.exec(sql, function (err) {
-//       if (err) {
-//         console.error('Помилка при зміні бази:', err);
-//         reject(err);
-//       } else {
-//         console.log('Таблицю BankTokens оновлено');
-//         resolve(true);
-//       }
-//     });
-//   });
-// }
-
 module.exports = {
-  //tempChangeBase,
   createUser,
   getUserByName,
   getUserById,
+  getUserInfo,
+  
   getAllOperations,
   createOperation,
-  getAllCategories,
-  createCategory,
-  getAllOperationTypes,
-  createOperationType,
+  
+  // Експортуємо нові функції під старими назвами, щоб не зламати categoryController.js
+  getAllCategories: getAllLimits,
+  createCategory: createLimit,
+  setCategoryTarget: setLimitTarget,
+  deleteCategory: deleteLimit,
+  
   generateToken,
   cancelToken,
   isTokenInvalid,
+  
   getAllSavings,
   createSavings,
   updateSavings,
   deleteSavings,
-  getUserInfo,
+  
   getReport_incvsexp,
   getReport_CatExp,
   getReport_ExpenseTrend,
-  deleteCategory,
-  setCategoryTarget,
+  
   getBankToken,
   setBankToken
 }
