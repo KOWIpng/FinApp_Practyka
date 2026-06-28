@@ -113,16 +113,21 @@ FROM Operations
 GROUP BY user_id, type;
 
 -- В'юха для повної інформації про користувача
-CREATE OR REPLACE VIEW vUserFullInfo AS
-SELECT
+CREATE VIEW vUserFullInfo AS
+SELECT 
     u.code AS user_id,
     u.name AS user_name,
-    COUNT(DISTINCT o.code) AS total_operations,
-    COUNT(DISTINCT s.code) AS total_savings
-FROM Users u
-LEFT JOIN Operations o ON u.code = o.user_id
-LEFT JOIN Savings s ON u.code = s.user_id
-GROUP BY u.code, u.name;
+    -- Загальний баланс (всі доходи мінус всі витрати)
+    COALESCE((SELECT SUM(amount) FROM Operations WHERE user_id = u.code AND type = 'income'), 0) - 
+    COALESCE((SELECT SUM(amount) FROM Operations WHERE user_id = u.code AND type = 'expense'), 0) AS total_capital,
+    
+    -- Дельта поточного місяця (доходи цього місяця мінус витрати цього місяця)
+    COALESCE((SELECT SUM(amount) FROM Operations WHERE user_id = u.code AND type = 'income' AND EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM CURRENT_DATE)), 0) - 
+    COALESCE((SELECT SUM(amount) FROM Operations WHERE user_id = u.code AND type = 'expense' AND EXTRACT(MONTH FROM date) = EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM CURRENT_DATE)), 0) AS current_month,
+    
+    -- Сума у скарбничках
+    COALESCE((SELECT SUM(current) FROM Savings WHERE user_id = u.code), 0) AS total_savings
+FROM Users u;
 
 -- ==========================================
 -- 4. ТРИГЕРИ

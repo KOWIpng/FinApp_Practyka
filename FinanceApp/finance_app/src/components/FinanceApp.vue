@@ -6,8 +6,7 @@
         <h2 class="modal-title">Реєстрація</h2>
         <form @submit.prevent="register">
           <div class="form-group">
-            <label>Email</label>
-            <!--            <input type="email" v-model="registerForm.email" required />-->
+            <label>Ім'я користувача</label>
             <input type="text" v-model="registerForm.name" required />
           </div>
           <div class="form-group">
@@ -37,9 +36,6 @@
         <div class="header-container">
           <div class="logo">FinanceTracker</div>
           <div class="user-menu">
-
-
-
             <div class="theme-toggle" @click="toggleTheme">
               <div class="toggle-track-triple">
                 <div class="toggle-thumb-triple" :class="theme"></div>
@@ -54,30 +50,24 @@
             </button>
 
             <div>
-              <!-- Аватар користувача -->
               <div class="user-avatar" @click="toggleTokenForm">
                 {{ userInitials }}
               </div>
 
-              <!-- Модальне вікно форми -->
+              <!-- Monobank Token Modal -->
               <div v-if="showTokenForm" class="modal-overlay">
                 <div class="modal-content">
                   <h3>Прив'язка банківського акаунту</h3>
-
                   <input type="text" v-model="bankToken" placeholder="Введіть ваш токен" class="token-input" />
-
                   <label>Дата початку:</label>
                   <input type="date" v-model="dateFrom" class="token-input" />
-
                   <label>Дата завершення:</label>
                   <input type="date" v-model="dateTo" class="token-input" />
-
                   <button @click="saveBankToken" class="btn btn-secondary">Зберегти токен</button>
                   <button @click="fetchTransactions" class="btn btn-secondary">Отримати транзакції</button>
                   <button @click="showTokenForm = false" class="btn btn-secondary">Закрити</button>
                 </div>
               </div>
-
             </div>
           </div>
         </div>
@@ -94,8 +84,7 @@
             <button @click="activeTab = 'analytics'" :class="['tab-button', activeTab === 'analytics' ? 'active' : '']">
               Графіки та аналітика
             </button>
-            <button @click="activeTab = 'transactions'"
-              :class="['tab-button', activeTab === 'transactions' ? 'active' : '']">
+            <button @click="activeTab = 'transactions'" :class="['tab-button', activeTab === 'transactions' ? 'active' : '']">
               Витрати та доходи
             </button>
             <button @click="activeTab = 'savings'" :class="['tab-button', activeTab === 'savings' ? 'active' : '']">
@@ -105,11 +94,13 @@
 
           <!-- Home Tab -->
           <div v-if="activeTab === 'home'" class="tab-content">
+            
             <!-- Total Capital Card -->
             <div class="card capital-card">
               <h2 class="card-title">Загальний капітал</h2>
-              <p class="capital-amount" :class="{'positive': totalCapital>=0, 'negative': totalCapital<0}">₴ {{
-                formatNumber(totalCapital) }}</p>
+              <p class="capital-amount" :class="{'positive': totalCapital>=0, 'negative': totalCapital<0}">
+                ₴ {{ formatNumber(totalCapital) }}
+              </p>
               <div class="capital-trend" :class="{'positive': currentMonthDelta>0, 'negative': currentMonthDelta<0}">
                 <svg class="trend-icon" viewBox="0 0 24 24">
                   <path v-if="currentMonthDelta>0" d="M5 10l7-7m0 0l7 7m-7-7v18"></path>
@@ -120,68 +111,88 @@
             </div>
 
             <div>
-              <button v-if="!showTargetForm" class="add-transaction-button" @click="showTargetForm = true">
+              <button v-if="!showTargetForm" class="add-transaction-button" @click="showTargetForm = true" style="margin-bottom: 20px; position: relative;">
                 <span class="plus-icon">⚙</span>
               </button>
             </div>
 
-            <div>
-              <div v-if="showTargetForm" class="transaction-form-overlay">
-                <div class="transaction-form-container">
-                  <div class="card">
-                    <h2 class="card-title">Управління лімітами по категоріях</h2>
-                    <div class="transaction-form">
-                      <div class="form-group" v-for="category in budgetCategories" :key="category.code">
-                        <label>{{ category.name }}</label>
-                        <input type="number" v-model.number="category.target" placeholder="0.00" />
+            <!-- Manage Limits Modal -->
+            <div v-if="showTargetForm" class="transaction-form-overlay">
+              <div class="transaction-form-container">
+                <div class="card">
+                  <h2 class="card-title">Управління лімітами на місяць</h2>
+                  <div class="transaction-form">
+                    <div class="form-group" v-for="category in budgetCategories" :key="category.id">
+                      <label>{{ category.name }}</label>
+                      <div style="display: flex; gap: 10px;">
+                        <input type="number" v-model.number="category.budget" placeholder="0.00" style="flex: 1;" />
                         <button @click="updateCategoryTarget(category)" class="btn btn-primary">Зберегти</button>
                         <button @click="deleteCategory(category)" class="btn btn-danger">Видалити</button>
                       </div>
-                      <div class="form-group">
-                        <button @click="showTargetForm = false; loadCategories()"
-                          class="btn btn-secondary btn-full">Закрити</button>
-                      </div>
+                    </div>
+                    
+                    <hr style="margin: 20px 0; border: 0; border-top: 1px solid var(--border-color);" />
+                    
+                    <h3 style="margin-bottom: 15px; font-size: 16px;">Створити новий ліміт</h3>
+                    <div class="form-group">
+                      <input type="text" v-model="newLimitName" placeholder="Назва (напр. Одяг)" />
+                    </div>
+                    <div class="form-group">
+                      <input type="number" v-model.number="newLimitAmount" placeholder="Сума ліміту (напр. 3000)" />
+                    </div>
+                    <div class="form-group">
+                      <button @click="addNewLimit" class="btn btn-primary btn-full">Додати ліміт</button>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 15px;">
+                      <button @click="showTargetForm = false; loadCategories()" class="btn btn-secondary btn-full">Закрити</button>
                     </div>
                   </div>
                 </div>
               </div>
-
             </div>
 
-
-
-
             <!-- Budget Categories -->
-            <h2 class="section-title">Категорії бюджету на місяць</h2>
+            <h2 class="section-title">Ліміти бюджету на місяць</h2>
             <div class="budget-categories">
-              <div v-for="(category, index) in budgetCategories.filter(c => c.direction === 'expense')" :key="index"
-                class="card category-card">
+              <div v-for="(category, index) in budgetCategories" :key="index" class="card category-card">
                 <div class="category-header">
                   <h3 class="category-name">{{ category.name }}</h3>
+                  <span style="font-size: 14px; color: var(--text-muted);">з ₴{{ formatNumber(category.budget) }}</span>
                 </div>
                 <div class="progress-bar-bg">
                   <div class="progress-bar" :class="getProgressColor(category.spent, category.budget)"
-                    :style="{ width: `${Math.min(100, (category.spent / category.budget) * 100)}%` }"></div>
+                    :style="{ width: category.budget > 0 ? `${Math.min(100, (category.spent / category.budget) * 100)}%` : '0%' }"></div>
                 </div>
                 <div class="category-remaining">
-                  Залишилось: ₴{{ formatNumber(category.budget - category.spent) }}
+                  Залишилось: <span :style="{color: category.remaining < 0 ? '#ef4444' : 'inherit'}">₴{{ formatNumber(category.remaining) }}</span>
                 </div>
               </div>
             </div>
 
             <!-- Quick Add Transaction -->
             <div class="card">
-              <h2 class="card-title">Додати транзакцію</h2>
+              <h2 class="card-title">Швидко додати витрату</h2>
               <div class="quick-transaction-form">
                 <div class="form-group">
                   <label>Сума</label>
                   <input type="number" v-model="newTransaction.amount" placeholder="0.00" />
                 </div>
                 <div class="form-group">
-                  <label>Категорія</label>
-                  <select v-model="newTransaction.category">
-                    <option v-for="(category, index) in budgetCategories" :key="index" :value="category.name">
-                      {{ category.name }}
+                  <label>Категорія (Що купили?)</label>
+                  <input type="text" v-model="newTransaction.category" placeholder="Введіть категорію" list="default-cats" />
+                  <datalist id="default-cats">
+                    <option value="Продукти"></option>
+                    <option value="Транспорт"></option>
+                    <option value="Комуналка"></option>
+                  </datalist>
+                </div>
+                <div class="form-group">
+                  <label>Прив'язати до ліміту (необов'язково)</label>
+                  <select v-model="newTransaction.limitId">
+                    <option value="">-- Без ліміту --</option>
+                    <option v-for="limit in budgetCategories" :key="limit.id" :value="limit.id">
+                      {{ limit.name }}
                     </option>
                   </select>
                 </div>
@@ -210,20 +221,14 @@
                   <div class="form-group">
                     <label>Місяць</label>
                     <select v-model="selectedMonth">
-                      <option v-for="month in availableMonths" :key="month.value" :value="month.value">
-                        {{ month.name }}
-                      </option>
+                      <option v-for="month in availableMonths" :key="month.value" :value="month.value">{{ month.name }}</option>
                     </select>
                   </div>
                   <div class="form-group">
-                    <button @click="loadChartData(); renderCharts()" class="btn btn-primary">
-                      Оновити
-                    </button>
+                    <button @click="loadChartData(); renderCharts()" class="btn btn-primary">Оновити</button>
                   </div>
                   <div class="form-group">
-                    <button @click="exportChartsToPDF" class="btn btn-secondary">
-                      Експортувати в PDF
-                    </button>
+                    <button @click="exportChartsToPDF" class="btn btn-secondary">Експортувати в PDF</button>
                   </div>
                 </div>
               </div>
@@ -232,53 +237,34 @@
             <!-- Category Expenses Chart -->
             <div class="card">
               <h2 class="card-title">Витрати за категоріями</h2>
-              <div class="chart-container">
-                <canvas id="categoryExpensesChart"></canvas>
-              </div>
+              <div class="chart-container"><canvas id="categoryExpensesChart"></canvas></div>
             </div>
 
             <!-- Income vs Expense Chart -->
             <div class="card">
               <h2 class="card-title">Доходи vs Витрати</h2>
-              <div class="chart-container">
-                <canvas id="incomeVsExpenseChart"></canvas>
-              </div>
+              <div class="chart-container"><canvas id="incomeVsExpenseChart"></canvas></div>
             </div>
 
             <!-- Expense Trend Chart -->
             <div class="card">
               <h2 class="card-title">Тренд витрат</h2>
-              <div class="chart-container">
-                <canvas id="expenseTrendChart"></canvas>
-              </div>
+              <div class="chart-container"><canvas id="expenseTrendChart"></canvas></div>
             </div>
           </div>
+
           <!-- Transactions Tab -->
           <div v-if="activeTab === 'transactions'" class="tab-content">
             <div class="card">
               <div class="transactions-header">
                 <h2 class="card-title">Останні транзакції</h2>
                 <div class="transaction-filters">
-                  <button @click="transactionType = 'all'"
-                    :class="['filter-button', transactionType === 'all' ? 'active' : '']">
-                    Всі
-                  </button>
-                  <button @click="transactionType = 'expense'"
-                    :class="['filter-button', transactionType === 'expense' ? 'active' : '']">
-                    Витрати
-                  </button>
-                  <button @click="transactionType = 'income'"
-                    :class="['filter-button', transactionType === 'income' ? 'active' : '']">
-                    Доходи
-                  </button>
-                  <button @click="downloadExcel" class="btn btn-primary">
-                    ⬇️ Завантажити звіт (.xlsx)
-                  </button>
-
+                  <button @click="transactionType = 'all'" :class="['filter-button', transactionType === 'all' ? 'active' : '']">Всі</button>
+                  <button @click="transactionType = 'expense'" :class="['filter-button', transactionType === 'expense' ? 'active' : '']">Витрати</button>
+                  <button @click="transactionType = 'income'" :class="['filter-button', transactionType === 'income' ? 'active' : '']">Доходи</button>
+                  <button @click="downloadExcel" class="btn btn-primary">⬇️ Завантажити звіт (.xlsx)</button>
                 </div>
               </div>
-
-
 
               <div class="transactions-table-container">
                 <table class="transactions-table">
@@ -295,8 +281,7 @@
                       <td>{{ transaction.date }}</td>
                       <td>{{ transaction.category }}</td>
                       <td>{{ transaction.description }}</td>
-                      <td class="amount-column"
-                        :class="transaction.type === 'income' ? 'income-amount' : 'expense-amount'">
+                      <td class="amount-column" :class="transaction.type === 'income' ? 'income-amount' : 'expense-amount'">
                         {{ transaction.type === 'income' ? '+' : '-' }}₴{{ formatNumber(transaction.amount) }}
                       </td>
                     </tr>
@@ -304,71 +289,11 @@
                 </table>
               </div>
             </div>
-
-            <button v-if="!showTransactionForm" class="add-transaction-button" @click="showTransactionForm = true">
-              <span class="plus-icon">+</span>
-            </button>
-
-            <div v-if="showTransactionForm" class="transaction-form-overlay">
-              <div class="transaction-form-container">
-                <div class="card">
-                  <h2 class="card-title">Додати нову транзакцію</h2>
-                  <div class="transaction-form">
-                    <div class="form-group">
-                      <label>Тип</label>
-                      <div class="transaction-type-buttons">
-                        <button @click="newTransaction.type = 'expense'"
-                          :class="['type-button', newTransaction.type === 'expense' ? 'active' : '']">
-                          Витрата
-                        </button>
-                        <button @click="newTransaction.type = 'income'"
-                          :class="['type-button', newTransaction.type === 'income' ? 'active' : '']">
-                          Дохід
-                        </button>
-                      </div>
-                    </div>
-                    <div class="form-group">
-                      <label>Сума</label>
-                      <input type="number" v-model="newTransaction.amount" placeholder="0.00" />
-                    </div>
-                    <div class="form-group">
-                      <label>Категорія</label>
-                      <select v-model="newTransaction.category">
-                        <option v-for="(category, index) in filteredCategories" :key="index" :value="category.name">
-                          {{ category.name }}
-                        </option>
-                      </select>
-                    </div>
-                    <div class="form-group">
-                      <label>Опис</label>
-                      <input type="text" v-model="newTransaction.description" placeholder="Опис транзакції" />
-                    </div>
-                    <div class="form-group">
-                      <input v-model="newCategoryName" placeholder="Нова категорія" />
-                    </div>
-                    <div class="form-group">
-                      <button @click="addNewCategory" class="btn btn-primary btn-full">
-                        Додати категорію
-                      </button>
-                    </div>
-                    <div class="form-group">
-                      <button @click="addTransaction" class="btn btn-primary btn-full">
-                        Додати транзакцію
-                      </button>
-                    </div>
-                    <div class="form-group">
-                      <button @click="showTransactionForm = false" class="btn btn-secondary btn-full">
-                        Відміна
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
 
           <!-- Savings Tab -->
           <div v-if="activeTab === 'savings'" class="tab-content">
+            <!-- Savings Summary -->
             <div class="savings-summary">
               <div class="card">
                 <h2 class="card-title">Загальні накопичення</h2>
@@ -380,36 +305,28 @@
                 <div class="add-savings-form">
                   <div class="form-group">
                     <select v-model="selectedGoalId">
-                      <option v-for="(goal, index) in savingsGoals" :key="index" :value="goal.id">
-                        {{ goal.name }}
-                      </option>
+                      <option v-for="(goal, index) in savingsGoals" :key="index" :value="goal.id">{{ goal.name }}</option>
                     </select>
                   </div>
                   <div class="form-group">
                     <input type="number" v-model="savingsAmount" placeholder="0.00" />
                   </div>
-                  <button @click="addToSavings" class="btn btn-primary">
-                    Додати
-                  </button>
-
+                  <button @click="addToSavings" class="btn btn-primary">Додати</button>
                 </div>
               </div>
             </div>
 
+            <!-- Savings Goals -->
             <div class="card">
               <h2 class="card-title">Цілі накопичень</h2>
               <div class="savings-goals">
-                <div v-for="(goal, index) in savingsGoals" :key="index" class="savings-goal"
-                  @dblclick="deleteGoal(goal.id)">
+                <div v-for="(goal, index) in savingsGoals" :key="index" class="savings-goal" @dblclick="deleteGoal(goal.id)">
                   <div class="goal-header">
                     <h3 class="goal-name">{{ goal.name }}</h3>
-                    <span class="goal-progress">
-                      {{ formatNumber(goal.current) }} / {{ formatNumber(goal.target) }}
-                    </span>
+                    <span class="goal-progress">{{ formatNumber(goal.current) }} / {{ formatNumber(goal.target) }}</span>
                   </div>
                   <div class="progress-bar-bg">
-                    <div class="progress-bar progress-green"
-                      :style="{ width: `${Math.min(100, (goal.current / goal.target) * 100)}%` }"></div>
+                    <div class="progress-bar progress-green" :style="{ width: `${Math.min(100, (goal.current / goal.target) * 100)}%` }"></div>
                   </div>
                   <div class="goal-details">
                     <span class="goal-percentage">{{ Math.round((goal.current / goal.target) * 100) }}%</span>
@@ -419,6 +336,7 @@
               </div>
             </div>
 
+            <!-- New Goal Form -->
             <div class="card">
               <h2 class="card-title">Створити нову ціль</h2>
               <div class="new-goal-form">
@@ -431,9 +349,60 @@
                   <input type="number" v-model="newGoal.target" placeholder="0.00" />
                 </div>
                 <div class="form-group">
-                  <button @click="addSavingsGoal" class="btn btn-primary btn-full">
-                    Створити ціль
-                  </button>
+                  <button @click="addSavingsGoal" class="btn btn-primary btn-full">Створити ціль</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Global Add Transaction Button -->
+        <button v-if="!showTransactionForm" class="add-transaction-button" @click="showTransactionForm = true">
+          <span class="plus-icon">+</span>
+        </button>
+
+        <!-- Add Transaction Modal -->
+        <div v-if="showTransactionForm" class="transaction-form-overlay">
+          <div class="transaction-form-container">
+            <div class="card">
+              <h2 class="card-title">Додати нову транзакцію</h2>
+              <div class="transaction-form">
+                <div class="form-group">
+                  <label>Тип</label>
+                  <div class="transaction-type-buttons">
+                    <button @click="newTransaction.type = 'expense'" :class="['type-button', newTransaction.type === 'expense' ? 'active' : '']">Витрата</button>
+                    <button @click="newTransaction.type = 'income'" :class="['type-button', newTransaction.type === 'income' ? 'active' : '']">Дохід</button>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Сума</label>
+                  <input type="number" v-model="newTransaction.amount" placeholder="0.00" />
+                </div>
+                
+                <div class="form-group">
+                  <label>Категорія (Що це було?)</label>
+                  <input type="text" v-model="newTransaction.category" placeholder="Наприклад: Зарплата, Продукти, Кіно..." />
+                </div>
+
+                <div class="form-group" v-if="newTransaction.type === 'expense'">
+                  <label>Прив'язати до ліміту (бюджету)</label>
+                  <select v-model="newTransaction.limitId">
+                    <option value="">-- Без ліміту --</option>
+                    <option v-for="limit in budgetCategories" :key="limit.id" :value="limit.id">{{ limit.name }}</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label>Опис</label>
+                  <input type="text" v-model="newTransaction.description" placeholder="Деталі транзакції" />
+                </div>
+                
+                <div class="form-group" style="margin-top: 20px;">
+                  <button @click="addTransaction" class="btn btn-primary btn-full">Додати транзакцію</button>
+                </div>
+                <div class="form-group">
+                  <button @click="showTransactionForm = false" class="btn btn-secondary btn-full">Відміна</button>
                 </div>
               </div>
             </div>
@@ -447,48 +416,32 @@
       <div class="login-form-container">
         <div class="login-header">
           <h2 class="app-title">FinanceTracker</h2>
-          <p class="login-subtitle">
-            Увійдіть до свого облікового запису
-          </p>
+          <p class="login-subtitle">Увійдіть до свого облікового запису</p>
         </div>
         <form class="login-form" @submit.prevent="login">
           <div class="login-inputs">
             <div class="form-group">
-              <label for="email-address" class="sr-only">Email</label>
-              <!--              <input id="email-address" name="email" type="email" required v-model="loginForm.email" placeholder="Email" />-->
-              <input id="email-address" name="name" type="text" required v-model="loginForm.name"
-                placeholder="Ім'я користувача" />
+              <label for="email-address" class="sr-only">Ім'я користувача</label>
+              <input id="email-address" name="name" type="text" required v-model="loginForm.name" placeholder="Ім'я користувача" />
             </div>
             <div class="form-group">
               <label for="password" class="sr-only">Пароль</label>
-              <input id="password" name="password" type="password" required v-model="loginForm.password"
-                placeholder="Пароль" />
+              <input id="password" name="password" type="password" required v-model="loginForm.password" placeholder="Пароль" />
             </div>
           </div>
 
           <div class="login-options">
-            <!--            <div class="remember-me">-->
-            <!--              <input id="remember-me" name="remember-me" type="checkbox" />-->
-            <!--              <label for="remember-me">-->
-            <!--                Запам'ятати мене-->
-            <!--              </label>-->
-            <!--            </div>-->
-
             <div class="forgot-password">
               <a href="#">Забули пароль?</a>
             </div>
           </div>
 
           <div class="form-group">
-            <button type="submit" class="btn btn-primary btn-full">
-              Увійти
-            </button>
+            <button type="submit" class="btn btn-primary btn-full">Увійти</button>
           </div>
         </form>
         <div class="register-link">
-          <button @click="showRegistration = true" class="btn-link">
-            Створити новий обліковий запис
-          </button>
+          <button @click="showRegistration = true" class="btn-link">Створити новий обліковий запис</button>
         </div>
       </div>
     </div>
@@ -530,6 +483,8 @@ const userInitials = computed(() => {
 });
 
 const categoryExpenses = ref([]);
+const newLimitName = ref('');
+const newLimitAmount = ref(null);
 
 // App state
 const showTransactionForm = ref(false);
@@ -541,11 +496,12 @@ const totalSavings = ref(0);
 const savingsAmount = ref(null);
 const selectedGoalId = ref(null);
 
-// ЗМІНА: Формат дати для PostgreSQL (YYYY-MM-DD)
+// newTransaction (додався limitId)
 const newTransaction = ref({
   type: 'expense',
   amount: null,
   category: '',
+  limitId: '', // <--- Нове поле для прив'язки до ліміту
   description: '',
   date: new Date().toISOString().split('T')[0] 
 });
@@ -729,7 +685,11 @@ const fetchTransactions = async () => {
   }
 };
 
-async function addNewCategory() {
+async function addNewLimit() {
+  if (!newLimitName.value || !newLimitAmount.value) {
+    alert('Будь ласка, введіть назву та суму ліміту');
+    return;
+  }
   try {
     const res = await fetch('http://localhost:3000/api/categories', {
       method: 'POST',
@@ -737,15 +697,20 @@ async function addNewCategory() {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${localStorage.getItem('token')}`
       },
-      // ЗМІНА: Замість direction відправляємо стартовий target (0)
-      body: JSON.stringify({ name: newCategoryName.value, userId: user.value.id, target: 0 })
+      // Відправляємо назву, ID юзера і бажану суму ліміту (target)
+      body: JSON.stringify({ 
+        name: newLimitName.value, 
+        userId: user.value.id, 
+        target: Number(newLimitAmount.value) 
+      })
     });
 
     const data = await res.json();
     if (data.success) {
-      alert('Ліміт додано!');
-      newCategoryName.value = '';
-      await loadCategories();
+      alert('Ліміт успішно створено!');
+      newLimitName.value = '';
+      newLimitAmount.value = null;
+      await loadCategories(); // Оновлюємо список
     } else {
       console.error('Помилка з сервера:', data.message);
     }
@@ -830,8 +795,8 @@ async function addTransaction() {
       body: JSON.stringify({
         userId: userId,
         date: newTransaction.value.date,
-        limitId: selectedLimit ? selectedLimit.id : null,
-        category: newTransaction.value.category,
+        limitId: newTransaction.value.limitId || null, // Якщо пусте, відправляємо null
+        category: newTransaction.value.category,       // Назва текстом ("Сільпо", "Зарплата")
         amount: Number(newTransaction.value.amount),
         currency: 'UAH',
         description: newTransaction.value.description,
@@ -840,16 +805,19 @@ async function addTransaction() {
     });
 
     if (response.ok) {
+      // Скидаємо форму
       newTransaction.value = {
         type: 'expense',
         amount: null,
         category: '',
+        limitId: '',
         description: '',
         date: new Date().toISOString().split('T')[0]
       };
       
       loadTransactions();
-      loadCategories(); // Оновлюємо ліміти, щоб побачити залишок
+      loadCategories(); // Оновлюємо ліміти
+      loadUserInfo();   // Оновлюємо баланс
       showTransactionForm.value = false;
     } else {
       console.error('Помилка додавання транзакції');
@@ -1081,7 +1049,7 @@ async function loadTransactions() {
     if (response.ok) {
       const data = await response.json();
       transactions.value = data.map(operation => ({
-        date: operation.operation_date,
+        date: new Date(operation.operation_date).toLocaleDateString('uk-UA'),
         category: operation.operation_category,
         description: operation.operation_description,
         amount: operation.amount,
@@ -1104,13 +1072,14 @@ async function loadCategories() {
 
     if (response.ok) {
       const data = await response.json();
-      // ЗМІНА: Мапінг полів згідно з новою в'юхою vLimitsState
+      // Мапінг полів згідно з новою в'юхою vLimitsState
       budgetCategories.value = data.map(limit => ({
         id: limit.limit_code,
         name: limit.limit_name,
         budget: Number(limit.target),
         spent: Number(limit.spent_this_month),
-        remaining: Number(limit.current_remaining)
+        remaining: Number(limit.current_remaining),
+        direction: 'expense'
       }));
     }
   } catch (error) {
@@ -1170,11 +1139,12 @@ async function loadUserInfo() {
 
     if (response.ok) {
       const data = await response.json();
+      console.log("Дані користувача:", data);
       if (data.length > 0) {
-        // Залишив як було, хоча можливо доведеться адаптувати під нову логіку
-        totalCapital.value = data[0].amount || 0;
-        currentMonthDelta.value = data[0].current_month || 0;
-        totalSavings.value = data[0].total_savings || 0;
+        // 
+       totalCapital.value = Number(data[0].total_capital) || 0;
+        currentMonthDelta.value = Number(data[0].current_month) || 0;
+        totalSavings.value = Number(data[0].total_savings) || 0;
       }
     }
   } catch (error) {
@@ -1964,12 +1934,14 @@ body {
   text-align: right;
 }
 
-.income-amount {
-  color: #10b981;
+.transactions-table td.income-amount {
+  color: #10b981 !important;
+  font-weight: 600;
 }
 
-.expense-amount {
-  color: #ef4444;
+.transactions-table td.expense-amount {
+  color: #ef4444 !important;
+  font-weight: 600;
 }
 
 /* Transaction Form */
