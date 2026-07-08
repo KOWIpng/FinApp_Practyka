@@ -15,9 +15,16 @@ async function getAllOperations(req, res) {
 
 async function createOperation(req, res) {
     try {
-        // ОНОВЛЕНО: Тепер приймаємо нові поля, які відповідають новій таблиці Operations
+        console.log("📥 Прийшли дані з фронтенду:", req.body); // Одразу побачимо, де губиться сума
+        
         const { userId, date, limitId, amount, currency, category, description, type } = req.body;
         
+        // Якщо сума не прийшла або вона null — відбиваємо запит ще до бази
+        if (amount === undefined || amount === null) {
+            console.error(" Помилка: сума (amount) відсутня у запиті!");
+            return res.status(400).json({ message: 'Сума обов\'язкова' });
+        }
+
         const operationId = await db.createOperation(
             userId, date, limitId, amount, currency, category, description, type
         );

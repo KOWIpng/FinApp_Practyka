@@ -515,22 +515,21 @@ const newGoal = ref({
 // Budget categories (Тепер це Ліміти)
 const budgetCategories = ref([]);
 
-// ЗМІНА: Логіка фільтрації категорій
-const filteredCategories = computed(() => {
-  if (newTransaction.value.type === 'expense') {
-    // Для витрат показуємо створені ліміти
-    return budgetCategories.value;
-  } else if (newTransaction.value.type === 'income') {
-    // Для доходів даємо стандартні варіанти
-    return [
-      { name: 'Зарплата' },
-      { name: 'Підробіток' },
-      { name: 'Інвестиції' },
-      { name: 'Інше' }
-    ];
-  }
-  return [];
-});
+// const filteredCategories = computed(() => {
+//   if (newTransaction.value.type === 'expense') {
+//     // Для витрат показуємо створені ліміти
+//     return budgetCategories.value;
+//   } else if (newTransaction.value.type === 'income') {
+//     // Для доходів даємо стандартні варіанти
+//     return [
+//       { name: 'Зарплата' },
+//       { name: 'Підробіток' },
+//       { name: 'Інвестиції' },
+//       { name: 'Інше' }
+//     ];
+//   }
+//   return [];
+// });
 
 
 // Transactions
@@ -556,7 +555,6 @@ const incomeVsExpenseChart = ref(null);
 const expenseTrendChart = ref(null);
 const incomeVsExpenseData = ref([]);
 const expenseTrendData = ref([]);
-const newCategoryName = ref('');
 const showTargetForm = ref(false);
 
 const getUniqueYears = computed(() => {
@@ -781,11 +779,11 @@ async function addTransaction() {
       return;
     }
     
-    // Шукаємо, чи є для цієї транзакції відповідний ліміт
-    const selectedLimit = budgetCategories.value.find(c => c.name === newTransaction.value.category);
+
+    //const selectedLimit = budgetCategories.value.find(c => c.name === newTransaction.value.category);
     const userId = user.value.id;
 
-    // ЗМІНА: Новий payload під нову структуру БД
+    
     const response = await fetch(`http://localhost:3000/api/operations/add`, {
       method: 'POST',
       headers: {
@@ -795,9 +793,9 @@ async function addTransaction() {
       body: JSON.stringify({
         userId: userId,
         date: newTransaction.value.date,
-        limitId: newTransaction.value.limitId || null, // Якщо пусте, відправляємо null
-        category: newTransaction.value.category,       // Назва текстом ("Сільпо", "Зарплата")
-        amount: Number(newTransaction.value.amount),
+        limitId: newTransaction.value.limitId || null, 
+        category: newTransaction.value.category,   
+        amount: Number(newTransaction.value.amount),    
         currency: 'UAH',
         description: newTransaction.value.description,
         type: newTransaction.value.type
@@ -817,7 +815,7 @@ async function addTransaction() {
       
       loadTransactions();
       loadCategories(); // Оновлюємо ліміти
-      loadUserInfo();   // Оновлюємо баланс
+      loadUserInfo();   
       showTransactionForm.value = false;
     } else {
       console.error('Помилка додавання транзакції');
