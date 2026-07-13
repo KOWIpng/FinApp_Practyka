@@ -16,69 +16,73 @@ if (apiKey && apiKey !== 'справжній_ключ_з_ai_studio') {
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));//delay між запитами
 
-async function categorizeTransaction(bankDescription, userLimits, maxRetries = 3) {
-    // ТЕСТОВИЙ РЕЖИМ
+async function categorizeTransactionsBatch(transactionsBatch, userLimits, maxRetries = 3) {
     if (!ai) {
-        console.log(`[Mock AI] Аналізую транзакцію: "${bankDescription}"`);
-        return { category: 'Інше (Тест)', limitId: null };
+        return transactionsBatch.map(tx => ({ id: tx.id, category: 'Інше (Тест)', limitId: null }));
     }
 
-    // Якщо ключ є (твій мапінг)
-const limitsContext = userLimits.map(l => `ID: ${l.id}, Назва ліміту: "${l.name}"`).join('\n');
-    console.log(`Передаємо ШІ такі ліміти:\n${limitsContext || "ЛІМІТІВ НЕМАЄ Пусто!"}`);
+    const limitsContext = userLimits.map(l => `ID: ${l.id}, Назва ліміту: "${l.name}"`).join('\n');
+    
+    // ДОДАНО СУМУ В ТЕКСТ ДЛЯ ШІ
+    const txContext = transactionsBatch.map(tx => 
+        `ID: ${tx.id} | Опис: "${tx.desc}" | MCC: "${tx.mcc}" | Сума: ${tx.amount} UAH`
+    ).join('\n');
 
+    // ОНОВЛЕНІ ЖОРСТКІ ПРАВИЛА
     const prompt = `
-        Ти — фінансовий помічник. Твоє завдання — категоризувати банківську транзакцію.
-        Опис транзакції: "${bankDescription}"
+        Ти — фінансовий помічник. Твоє завдання — категоризувати список банківських транзакцій.
+        
+        Ось список транзакцій для аналізу:
+        ${txContext}
 
         Ось список ДОСТУПНИХ ЛІМІТІВ користувача:
         ${limitsContext}
 
         ПРАВИЛА (СУВОРО):
-        1. Якщо це витрата (наприклад, магазин "АТБ", кафе, підписки): ти ЗОБОВ'ЯЗАНИЙ вибрати найбільш підходящий ліміт із наданого списку. Наприклад, для "АТБ" вибери ліміт "Їжа".
-        2. У поле limitId запиши виключно цифру (ID вибраного ліміту).
-        3. Якщо це ДОХІД (наприклад, переказ від когось, зарплата, поповнення), поверни limitId: null.
-        4. У поле category запиши коротку назву категорії (можеш використати назву вибраного ліміту або придумати свою, наприклад "Супермаркет").
+        1. Зверни увагу на СУМУ кожної транзакції.
+        2. Якщо Сума ВІД'ЄМНА (з мінусом, наприклад -78) — це ВИТРАТА. Для витрат ти ЗОБОВ'ЯЗАНИЙ підібрати найбільш логічний ліміт зі списку і повернути його цифру в поле limitId.
+        3. Якщо Сума ДОДАТНА (без мінуса, наприклад 3000) — це ДОХІД. Для доходів limitId ЗАВЖДИ має бути null.
+        4. Поверни JSON-масив об'єктів (id, category, limitId).
     `;
 
-    // повторні спроби 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
             const response = await ai.models.generateContent({
-                model: 'gemini-3.5-flash', 
+                model: 'models/gemini-flash-lite-latest',
                 contents: prompt,
                 config: {
                     responseMimeType: 'application/json',
                     responseSchema: {
-                        type: Type.OBJECT,
-                        properties: {
-                            category: { type: Type.STRING },
-                            limitId: { type: Type.INTEGER, nullable: true }
-                        },
-                        required: ['category', 'limitId'],
+                        type: Type.ARRAY, 
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                id: { type: Type.STRING }, // ID для зв'язку результату з транзакцією
+                                category: { type: Type.STRING },
+                                limitId: { type: Type.INTEGER, nullable: true }
+                            },
+                            required: ['id', 'category', 'limitId'],
+                        }
                     }
                 }
             });
 
             const result = JSON.parse(response.text.trim());
-            console.log(`Gemini Розпізнано "${bankDescription}" як:`, result);
-            return result; // Успіх 
+            console.log(`Gemini Успішно розпізнано пачку з ${result.length} транзакцій!`);
+            return result; // Повертаємо готовий масив відповідей
 
         } catch (err) {
-            console.error(`⚠️ Спроба ${attempt} для "${bankDescription}" провалилася:`, err.message);
+            console.error(`⚠️ Спроба ${attempt} для пачки провалилася:`, err.message);
+            if (attempt === maxRetries) return null; // Якщо все зламалося
             
-            // Якщо це була остання спроба - стоп
-            if (attempt === maxRetries) {
-                console.error(' Всі спроби вичерпано. Сервер ШІ недоступний.');
-                return { category: 'Без категорії', limitId: null };
-            }
+            let waitTime = attempt * 10000; 
+            const match = err.message.match(/retry in (\d+\.?\d*)s/);
+            if (match && match[1]) waitTime = Math.ceil(parseFloat(match[1])) * 1000 + 1000;
 
-            // пауза яка збільшується (5с, потім 10с)
-            const waitTime = attempt * 5000;
-            console.log(`Чекаю ${waitTime / 1000} секунд перед новою спробою...`);
+            console.log(`⏳ Чекаємо ${waitTime / 1000} секунд...`);
             await delay(waitTime);
         }
     }
 }
 
-module.exports = { categorizeTransaction };
+module.exports = { categorizeTransactionsBatch };
