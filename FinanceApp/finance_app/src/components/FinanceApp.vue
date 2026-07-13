@@ -501,7 +501,7 @@ const newTransaction = ref({
   type: 'expense',
   amount: null,
   category: '',
-  limitId: '', // <--- Нове поле для прив'язки до ліміту
+  limitId: '', 
   description: '',
   date: new Date().toISOString().split('T')[0] 
 });
@@ -633,13 +633,13 @@ async function saveBankToken() {
   }
 }
 
-const mccCategories = {
-  5411: 'Продукти', 5499: 'Делікатеси', 5812: 'Ресторани', 5814: 'Фастфуд',
-  5651: 'Одяг', 5661: 'Взуття', 5311: 'Універмаги', 4111: 'Автобуси',
-  4121: 'Таксі', 5541: 'АЗС', 4900: 'Комунальні платежі', 5912: 'Аптеки',
-  8062: 'Медичні послуги', 7832: 'Кінотеатри', 7997: 'Спорт', 4829: 'Перекази',
-  6011: 'Зняття готівки', 4899: 'Підписки'
-};
+// const mccCategories = {
+//   5411: 'Продукти', 5499: 'Делікатеси', 5812: 'Ресторани', 5814: 'Фастфуд',
+//   5651: 'Одяг', 5661: 'Взуття', 5311: 'Універмаги', 4111: 'Автобуси',
+//   4121: 'Таксі', 5541: 'АЗС', 4900: 'Комунальні платежі', 5912: 'Аптеки',
+//   8062: 'Медичні послуги', 7832: 'Кінотеатри', 7997: 'Спорт', 4829: 'Перекази',
+//   6011: 'Зняття готівки', 4899: 'Підписки'
+// };
 
 const fetchTransactions = async () => {
   if (!dateFrom.value || !dateTo.value) {
@@ -649,37 +649,39 @@ const fetchTransactions = async () => {
   const fromTimestamp = Math.floor(new Date(dateFrom.value).getTime());
   const toTimestamp = Math.floor(new Date(dateTo.value).getTime());
 
-  const res = await fetch(`http://localhost:3000/api/monobank/transactions/${user.value.id}/${fromTimestamp}/${toTimestamp}`, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${localStorage.getItem('token')}`,
-    },
-  });
+  try {
+    const res = await fetch(`http://localhost:3000/api/monobank/transactions/${user.value.id}/${fromTimestamp}/${toTimestamp}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+      },
+    });
 
-  const data = await res.json();
+    const data = await res.json();
 
-  if (!Array.isArray(data)) {
-    console.error('Очікувався масив, але отримано:', typeof data);
-    return;
-  }
+    if (!res.ok) {
+      alert(data.message || 'Помилка отримання транзакцій');
+      return;
+    }
 
-  for (const item of data) {
-    const txDate = new Date(item.time * 1000);
-    newTransaction.value = {
-      type: item.amount < 0 ? "expense" : "income",
-      amount: Number(Math.abs(item.amount) / 100),
-      category: mccCategories[item.mcc] || 'Інше',
-      description: item.description,
-      date: txDate.toISOString().split('T')[0] // Формат YYYY-MM-DD
-    };
-    await addTransaction();
-  }
+    if (!Array.isArray(data)) {
+      console.error('Очікувався масив, але отримано:', typeof data);
+      return;
+    }
 
-  if (res.ok) {
-    alert("Транзакції успішно отримані!");
-  } else {
-    alert(data.message || 'Помилка отримання транзакцій');
+    alert("Транзакції успішно отримані, категоризовані ШІ та збережені!");
+   await loadTransactions();
+    await loadCategoryExpenses();
+    await loadCategories();
+    await loadSavings();
+    await loadUserInfo();
+    
+    
+
+  } catch (err) {
+    console.error("Помилка синхронізації:", err);
+    alert('Сталася помилка при з\'єднанні з сервером');
   }
 };
 
