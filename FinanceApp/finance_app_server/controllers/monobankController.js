@@ -18,27 +18,42 @@ async function setToken(req, res) {
 async function getTransactions(req, res) {
     try {
         const userId = req.params.userId;
-        const from = req.params.from;
-        const to = req.params.to;
+        const fromDate = req.params.from; 
+        const toDate = req.params.to;
         
         console.log(`=== Синхронізація з Monobank для користувача ${userId} ===`);
 
-       
         const token = await db.getBankToken(userId);
         if (!token) {
-            console.log(" Токен відсутній для користувача", userId);
             return res.status(401).json({ message: 'Токен доступу не знайдено' });
         }
 
-        // URL запиту до monobank API
-        const ACCOUNT_ID = 0; // аккаунт за замовчуванням
-        let url = `https://api.monobank.ua/personal/statement/${ACCOUNT_ID}/${from}/`;
-        if (to && to !== "") {
-            url += `${to}`;
+        
+        let fromUnix;
+        if (!isNaN(fromDate)) {
+     
+            fromUnix = Math.floor(Number(fromDate) / 1000);
+        } else {
+          
+            fromUnix = Math.floor(new Date(fromDate).getTime() / 1000);
         }
+
+        const ACCOUNT_ID = 0;
+        let url = `https://api.monobank.ua/personal/statement/${ACCOUNT_ID}/${fromUnix}/`;
+
+        if (toDate && toDate !== "") {
+            let toUnix;
+            if (!isNaN(toDate)) {
+                toUnix = Math.floor(Number(toDate) / 1000);
+            } else {
+                toUnix = Math.floor(new Date(toDate).getTime() / 1000);
+            }
+            url += `${toUnix}`;
+        }
+        
         console.log("🔗 Запит до банку:", url);
 
-        // запит до API monobank
+        // Виконуємо запит до API monobank
         const response = await fetch(url, {
             method: 'GET',
             headers: {
@@ -49,11 +64,12 @@ async function getTransactions(req, res) {
 
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Помилка від monobank API:', response.status, errorText);
+            console.error(' Помилка від monobank API:', response.status, errorText);
             return res.status(response.status).json({ message: 'Помилка отримання транзакцій від банку' });
         }
 
         const bankTransactions = await response.json();
+        console.log("СИРА ВІДПОВІДЬ ВІД МОНОБАНКУ:", bankTransactions);
 
         // Якщо транзакцій немає, порожній масив
         if (!bankTransactions || bankTransactions.length === 0) {
@@ -65,7 +81,11 @@ async function getTransactions(req, res) {
 
         // Отримує поточні ліміти користувача з БД
         const userLimits = await db.getAllCategories(userId);
-        const mappedLimits = userLimits.map(c => ({ id: c.code, name: c.name }));
+        console.log("ліміти з БД:", userLimits);
+        const mappedLimits = userLimits.map(c => ({ 
+            id: c.limit_code, 
+            name: c.limit_name 
+        }));
 
         const enrichedTransactions = [];
 
