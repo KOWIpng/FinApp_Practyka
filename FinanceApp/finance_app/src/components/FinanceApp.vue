@@ -32,10 +32,10 @@
     <!-- Main App -->
     <div v-if="isLoggedIn" class="main-app">
       <!-- Header -->
-      <header class="app-header">
+     <header class="app-header">
         <div class="header-container">
           <div class="logo">FinanceTracker</div>
-          <div class="user-menu">
+          <div class="user-menu" style="display: flex; align-items: center; gap: 15px;">
             <div class="theme-toggle" @click="toggleTheme">
               <div class="toggle-track-triple">
                 <div class="toggle-thumb-triple" :class="theme"></div>
@@ -44,6 +44,16 @@
                 <div class="toggle-option">🌸</div>
               </div>
             </div>
+
+            <!-- ⚙️ КНОПКА НАЛАШТУВАННЯ ЛІМІТІВ (Без анімацій, зелена) -->
+            <button 
+              @click="showTargetForm = true" 
+              class="btn-limits-settings" 
+              title="Управління лімітами"
+              style="background: none; border: none; font-size: 1.8rem; cursor: pointer; display: flex; align-items: center; color: #10b981;"
+            >
+              ⚙&#xFE0E;
+            </button>
 
             <button @click="logout" class="btn-logout">
               Вийти
@@ -72,6 +82,41 @@
           </div>
         </div>
       </header>
+
+      <div v-if="showTargetForm" class="transaction-form-overlay">
+        <div class="transaction-form-container">
+          <div class="card">
+            <h2 class="card-title">Управління лімітами на місяць</h2>
+            <div class="transaction-form">
+              <div class="form-group" v-for="category in budgetCategories" :key="category.id">
+                <label>{{ category.name }}</label>
+                <div style="display: flex; gap: 10px;">
+                  <input type="number" v-model.number="category.budget" placeholder="0.00" style="flex: 1;" />
+                  <button @click="updateCategoryTarget(category)" class="btn btn-primary">Зберегти</button>
+                  <button @click="deleteCategory(category)" class="btn btn-danger">Видалити</button>
+                </div>
+              </div>
+              
+              <hr style="margin: 20px 0; border: 0; border-top: 1px solid var(--border-color);" />
+              
+              <h3 style="margin-bottom: 15px; font-size: 16px;">Створити новий ліміт</h3>
+              <div class="form-group">
+                <input type="text" v-model="newLimitName" placeholder="Назва (напр. Одяг)" />
+              </div>
+              <div class="form-group">
+                <input type="number" v-model.number="newLimitAmount" placeholder="Сума ліміту (напр. 3000)" />
+              </div>
+              <div class="form-group">
+                <button @click="addNewLimit" class="btn btn-primary btn-full">Додати ліміт</button>
+              </div>
+
+              <div class="form-group" style="margin-top: 15px;">
+                <button @click="showTargetForm = false; loadCategories()" class="btn btn-secondary btn-full">Закрити</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <!-- Main Content -->
       <main class="main-content">
@@ -107,48 +152,6 @@
                   <path v-if="currentMonthDelta<0" d="M5 10l7-7m0 0l7 7m-7-7v18" transform="rotate(180, 12, 12)"></path>
                 </svg>
                 ₴{{ formatNumber(currentMonthDelta) }} цього місяця
-              </div>
-            </div>
-
-            <div>
-              <button v-if="!showTargetForm" class="add-transaction-button" @click="showTargetForm = true" style="margin-bottom: 20px; position: relative;">
-                <span class="plus-icon">⚙</span>
-              </button>
-            </div>
-
-            <!-- Manage Limits Modal -->
-            <div v-if="showTargetForm" class="transaction-form-overlay">
-              <div class="transaction-form-container">
-                <div class="card">
-                  <h2 class="card-title">Управління лімітами на місяць</h2>
-                  <div class="transaction-form">
-                    <div class="form-group" v-for="category in budgetCategories" :key="category.id">
-                      <label>{{ category.name }}</label>
-                      <div style="display: flex; gap: 10px;">
-                        <input type="number" v-model.number="category.budget" placeholder="0.00" style="flex: 1;" />
-                        <button @click="updateCategoryTarget(category)" class="btn btn-primary">Зберегти</button>
-                        <button @click="deleteCategory(category)" class="btn btn-danger">Видалити</button>
-                      </div>
-                    </div>
-                    
-                    <hr style="margin: 20px 0; border: 0; border-top: 1px solid var(--border-color);" />
-                    
-                    <h3 style="margin-bottom: 15px; font-size: 16px;">Створити новий ліміт</h3>
-                    <div class="form-group">
-                      <input type="text" v-model="newLimitName" placeholder="Назва (напр. Одяг)" />
-                    </div>
-                    <div class="form-group">
-                      <input type="number" v-model.number="newLimitAmount" placeholder="Сума ліміту (напр. 3000)" />
-                    </div>
-                    <div class="form-group">
-                      <button @click="addNewLimit" class="btn btn-primary btn-full">Додати ліміт</button>
-                    </div>
-
-                    <div class="form-group" style="margin-top: 15px;">
-                      <button @click="showTargetForm = false; loadCategories()" class="btn btn-secondary btn-full">Закрити</button>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
 
@@ -204,25 +207,25 @@
               </div>
             </div>
 
-<div class="receipt-scanner-card" style="margin-top: 1rem; padding: 1rem; background: var(--bg-card); border-radius: 8px;">
-  <h4>📷 Сканувати чек ШІ</h4>
-  <p style="font-size: 0.9rem; color: gray;">Завантажте фото чека, і ШІ автоматично розпізнає суму та підбере ліміт.</p>
-  
-  <div style="margin-top: 10px;">
-    <!-- Спеціальний інпут для файлів -->
-    <input 
-      type="file" 
-      accept="image/*" 
-      @change="handleReceiptUpload" 
-      :disabled="isUploadingReceipt" 
-      style="margin-bottom: 10px;"
-    />
-    
-    <div v-if="isUploadingReceipt" style="color: var(--primary-color); font-weight: bold;">
-      ШІ аналізує чек, зачекайте...
-    </div>
-  </div>
-</div>
+            <!-- Receipt Scanner Card -->
+            <div class="receipt-scanner-card" style="margin-top: 1rem; padding: 1rem; background: var(--bg-card); border-radius: 8px;">
+              <h4>📷 Сканувати чек ШІ</h4>
+              <p style="font-size: 0.9rem; color: gray;">Завантажте фото чека, і ШІ автоматично розпізнає суму та підбере ліміт.</p>
+              
+              <div style="margin-top: 10px;">
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  @change="handleReceiptUpload" 
+                  :disabled="isUploadingReceipt" 
+                  style="margin-bottom: 10px;"
+                />
+                
+                <div v-if="isUploadingReceipt" style="color: var(--primary-color); font-weight: bold;">
+                  ШІ аналізує чек, зачекайте...
+                </div>
+              </div>
+            </div>
 
           </div>
 
@@ -471,7 +474,7 @@
 
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import Chart from 'chart.js/auto';
 import jsPDF from 'jspdf';
 
@@ -604,16 +607,15 @@ watch(transactions, () => {
   }
 }, { deep: true });
 
-watch([selectedYear, selectedMonth], () => {
-  loadChartData();
+watch([selectedYear, selectedMonth], async () => {
+  await loadChartData(); 
   renderCharts();
 }, { deep: true });
 
-watch(activeTab, (newVal) => {
+watch(activeTab, async (newVal) => {
   if (newVal === 'analytics') {
-    setTimeout(() => {
-      renderCharts();
-    }, 500);
+    await nextTick(); 
+    renderCharts();
   }
 });
 
@@ -1373,6 +1375,7 @@ onMounted(() => {
     loadUserInfo();
     loadSavings();
     loadChartData();
+    renderCharts();
     handleReceiptUpload();
   }
 });
