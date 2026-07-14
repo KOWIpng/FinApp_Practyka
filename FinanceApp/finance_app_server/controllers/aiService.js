@@ -88,4 +88,55 @@ async function categorizeTransactionsBatch(transactionsBatch, userLimits, maxRet
     }
 }
 
-module.exports = { categorizeTransactionsBatch };
+async function processReceiptImage(imageBuffer, mimeType, userLimits) {
+    if (!ai) throw new Error("ШІ не ініціалізовано");
+
+    const limitsContext = userLimits.map(l => `ID: ${l.id}, Назва: "${l.name}"`).join('\n');
+    
+    const prompt = `
+        Ти — фінансовий помічник. Твоє завдання — прочитати цей чек.
+        
+        Ось список ДОСТУПНИХ ЛІМІТІВ користувача:
+        ${limitsContext}
+
+        ПРАВИЛА:
+        1. Знайди ЗАГАЛЬНУ СУМУ (Total) до сплати.
+        2. Знайди назву закладу або визнач головну категорію покупок (наприклад, "Сільпо", "Аптека", "Кафе").
+        3. Підбери найбільш логічний ліміт зі списку і поверни його цифру в поле limitId.
+        4. Поверни виключно JSON-об'єкт (без масивів) у такому форматі:
+        {
+            "amount": 250.50,
+            "description": "Назва магазину або опис",
+            "category": "Категорія",
+            "limitId": 1
+        }
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: 'models/gemini-flash-lite-latest', 
+            contents: [
+                prompt,
+                {
+                    inlineData: {
+                        data: imageBuffer.toString("base64"),
+                        mimeType: mimeType
+                    }
+                }
+            ],
+            config: {
+                responseMimeType: 'application/json'
+            }
+        });
+
+        const result = JSON.parse(response.text.trim());
+        console.log(`[Gemini] Чек розпізнано:`, result);
+        return result;
+    } catch (err) {
+        console.error("Помилка розпізнавання чека:", err);
+        throw err;
+    }
+}
+
+
+module.exports = { categorizeTransactionsBatch, processReceiptImage };

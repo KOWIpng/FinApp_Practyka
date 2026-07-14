@@ -203,6 +203,27 @@
                 </div>
               </div>
             </div>
+
+<div class="receipt-scanner-card" style="margin-top: 1rem; padding: 1rem; background: var(--bg-card); border-radius: 8px;">
+  <h4>📷 Сканувати чек ШІ</h4>
+  <p style="font-size: 0.9rem; color: gray;">Завантажте фото чека, і ШІ автоматично розпізнає суму та підбере ліміт.</p>
+  
+  <div style="margin-top: 10px;">
+    <!-- Спеціальний інпут для файлів -->
+    <input 
+      type="file" 
+      accept="image/*" 
+      @change="handleReceiptUpload" 
+      :disabled="isUploadingReceipt" 
+      style="margin-bottom: 10px;"
+    />
+    
+    <div v-if="isUploadingReceipt" style="color: var(--primary-color); font-weight: bold;">
+      ШІ аналізує чек, зачекайте...
+    </div>
+  </div>
+</div>
+
           </div>
 
           <!-- Analytics Tab -->
@@ -633,13 +654,50 @@ async function saveBankToken() {
   }
 }
 
-// const mccCategories = {
-//   5411: 'Продукти', 5499: 'Делікатеси', 5812: 'Ресторани', 5814: 'Фастфуд',
-//   5651: 'Одяг', 5661: 'Взуття', 5311: 'Універмаги', 4111: 'Автобуси',
-//   4121: 'Таксі', 5541: 'АЗС', 4900: 'Комунальні платежі', 5912: 'Аптеки',
-//   8062: 'Медичні послуги', 7832: 'Кінотеатри', 7997: 'Спорт', 4829: 'Перекази',
-//   6011: 'Зняття готівки', 4899: 'Підписки'
-// };
+///////////////////////////чеки
+const isUploadingReceipt = ref(false);
+
+async function handleReceiptUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  isUploadingReceipt.value = true;
+  
+  // Використовуємо FormData для передачі файлу та тексту
+  const formData = new FormData();
+  formData.append('receipt', file);
+  formData.append('userId', user.value.id);
+
+  try {
+    const response = await fetch(`http://localhost:3000/api/operations/receipts/upload`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+        // multipart/form-data
+      },
+      body: formData
+    });
+
+    if (response.ok) {
+      alert('Чек успішно розпізнано та додано!');
+      
+      
+      await loadTransactions();
+      await loadCategories();
+      await loadCategoryExpenses();
+      await loadUserInfo();
+    } else {
+      alert('Не вдалося розпізнати чек.');
+    }
+  } catch (error) {
+    console.error("Помилка завантаження чека:", error);
+    alert("Помилка мережі");
+  } finally {
+    isUploadingReceipt.value = false;
+    event.target.value = ''; // Очищаємо інпут, щоб можна було завантажити той самий чек ще раз
+  }
+}
+
 
 const fetchTransactions = async () => {
   if (!dateFrom.value || !dateTo.value) {
@@ -1315,6 +1373,7 @@ onMounted(() => {
     loadUserInfo();
     loadSavings();
     loadChartData();
+    handleReceiptUpload();
   }
 });
 </script>

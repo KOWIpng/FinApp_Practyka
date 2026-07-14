@@ -1,5 +1,6 @@
 const db = require('../db');
 const XLSX = require('xlsx');
+const aiService = require('./aiService');
 
 async function getAllOperations(req, res) {
     try {
@@ -15,7 +16,7 @@ async function getAllOperations(req, res) {
 
 async function createOperation(req, res) {
     try {
-        console.log("📥 Прийшли дані з фронтенду:", req.body); // Одразу побачимо, де губиться сума
+        //console.log("Прийшли дані з фронтенду:", req.body); // Одразу побачимо, де губиться сума
         
         const { userId, date, limitId, amount, currency, category, description, type } = req.body;
         
@@ -57,4 +58,45 @@ async function exportTransactions(req, res) {
     }
 }
 
-module.exports = { getAllOperations, createOperation, exportTransactions };
+async function uploadReceipt(req, res) {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ message: "Файл не знайдено" });
+        }
+        
+        const userId = req.body.userId;
+        if (!userId) return res.status(400).json({ message: "Немає userId" });
+
+        const userLimits = await db.getAllCategories(userId); 
+        
+        const aiResult = await aiService.processReceiptImage(req.file.buffer, req.file.mimetype, userLimits);
+
+    
+     
+        const currentDate = new Date().toISOString().split('T')[0]; 
+        
+        const operationId = await db.createOperation(
+            userId, 
+            currentDate,               // date
+            aiResult.limitId,          // limitId
+            aiResult.amount,           // amount
+            'UAH',                     // currency
+            aiResult.category,         // category
+            aiResult.description,      // description
+            'expense'                  // type
+        );
+
+        res.json({ 
+            success: true, 
+            message: "Чек успішно оброблено",
+            operation_id: operationId 
+        });
+
+    } catch (error) {
+        console.error('Помилка обробки чека:', error);
+        res.status(500).json({ message: 'Помилка розпізнавання чека' });
+    }
+}
+
+
+module.exports = { getAllOperations, createOperation, exportTransactions, uploadReceipt };
