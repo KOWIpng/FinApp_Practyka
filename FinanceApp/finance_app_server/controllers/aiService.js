@@ -22,6 +22,7 @@ async function categorizeTransactionsBatch(transactionsBatch, userLimits, maxRet
     }
 
     const limitsContext = userLimits.map(l => `ID: ${l.id}, Назва ліміту: "${l.name}"`).join('\n');
+    console.log("Відправляємо ШІ такі ліміти:\n", limitsContext);
     
     // ДОДАНО СУМУ В ТЕКСТ ДЛЯ ШІ
     const txContext = transactionsBatch.map(tx => 
@@ -91,8 +92,13 @@ async function categorizeTransactionsBatch(transactionsBatch, userLimits, maxRet
 async function processReceiptImage(imageBuffer, mimeType, userLimits) {
     if (!ai) throw new Error("ШІ не ініціалізовано");
 
-    const limitsContext = userLimits.map(l => `ID: ${l.id}, Назва: "${l.name}"`).join('\n');
-    
+    const limitsContext = userLimits.map(l => {
+
+    return `ID: ${l.limit_code}, Назва: "${l.limit_name}"`;
+}).join('\n');
+
+    console.log("Відправляємо ШІ такі ліміти:\n", limitsContext);
+
     const prompt = `
         Ти — фінансовий помічник. Твоє завдання — прочитати цей чек.
         
@@ -102,7 +108,7 @@ async function processReceiptImage(imageBuffer, mimeType, userLimits) {
         ПРАВИЛА:
         1. Знайди ЗАГАЛЬНУ СУМУ (Total) до сплати.
         2. Знайди назву закладу або визнач головну категорію покупок (наприклад, "Сільпо", "Аптека", "Кафе").
-        3. Підбери найбільш логічний ліміт зі списку і поверни його цифру в поле limitId.
+        3. Далі ти ЗОБОВ'ЯЗАНИЙ підібрати найбільш логічний ліміт логічний ліміт зі списку ДОСТУПНИХ ЛІМІТІВ користувача Навіть якщо назва не збігається ідеально (наприклад, чек за одяг, а ліміт називається "Шопінг"), обери найближчий за логікою варіант. Поверни його цифру в поле limitId.
         4. Поверни виключно JSON-об'єкт (без масивів) у такому форматі:
         {
             "amount": 250.50,
